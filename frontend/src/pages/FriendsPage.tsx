@@ -13,7 +13,7 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
@@ -31,8 +31,10 @@ export function FriendsPage() {
   const [outgoing, setOutgoing] = useState<FriendRequest[]>([])
   const [results, setResults] = useState<User[]>([])
   const [query, setQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   async function load() {
     const [friendResponse, requestResponse, outgoingResponse] = await Promise.all([
@@ -51,12 +53,23 @@ export function FriendsPage() {
     )
   }, [])
 
+  useEffect(() => {
+    if (!searchOpen) return
+    window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus()
+    })
+  }, [searchOpen])
+
   async function search(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (query.trim().length < 2) return
+    const trimmedQuery = query.trim()
+    if (trimmedQuery.length < 2) {
+      setResults([])
+      return
+    }
     setError(null)
     try {
-      const response = await api.searchUsers(query)
+      const response = await api.searchUsers(trimmedQuery)
       const friendIDs = new Set(friends.map((friend) => friend.id))
       const outgoingIDs = new Set(
         outgoing
@@ -138,6 +151,17 @@ export function FriendsPage() {
     }
   }
 
+  function openSearch() {
+    setSearchOpen(true)
+  }
+
+  function closeSearch() {
+    setSearchOpen(false)
+    setQuery('')
+    setResults([])
+    setError(null)
+  }
+
   const suggestions = useMemo(
     () =>
       results.length > 0
@@ -149,7 +173,13 @@ export function FriendsPage() {
   return (
     <section className="friends-page">
       <aside className="friends-side-panel">
-        <div className="friends-side-heading">
+        <div
+          className={
+            searchOpen
+              ? 'friends-side-heading friends-side-heading-searching'
+              : 'friends-side-heading'
+          }
+        >
           <button
             aria-label="Go back"
             className="mobile-friends-back"
@@ -170,17 +200,34 @@ export function FriendsPage() {
             aria-label="Search friends"
             className="mobile-friends-search-button"
             type="button"
+            onClick={openSearch}
           >
             <Search size={24} />
           </button>
         </div>
-        <form className="friends-side-search" onSubmit={search}>
+        <form
+          className={
+            searchOpen
+              ? 'friends-side-search friends-side-search-open'
+              : 'friends-side-search'
+          }
+          onSubmit={search}
+        >
           <Search size={18} />
           <input
+            ref={searchInputRef}
             placeholder="Search Friends"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
+          <button
+            aria-label="Close friend search"
+            className="friends-search-clear"
+            type="button"
+            onClick={closeSearch}
+          >
+            <X size={18} />
+          </button>
         </form>
         <div className="friends-mobile-chips" aria-label="Friends filters">
           <button type="button">Suggestions</button>
