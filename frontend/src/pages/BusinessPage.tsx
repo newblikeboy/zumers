@@ -26,7 +26,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { ErrorBanner } from '../components/ErrorBanner'
 import businessHero from '../assets/zumers-business-hero.png'
 import { businessApi } from '../lib/api'
-import type { BusinessAccount } from '../lib/types'
+import type { BusinessAccount, BusinessDashboard } from '../lib/types'
 
 const businessTypes = [
   { icon: Utensils, title: 'Street food', text: 'Food carts, local stalls, snacks, and late-night favorites.' },
@@ -42,13 +42,6 @@ const onboardingSteps = [
   'Verification, visibility settings, and offers',
 ]
 
-const dashboardStats = [
-  { icon: BarChart3, label: 'Offer clicks', value: '0', hint: 'Today' },
-  { icon: Users, label: 'Profile visits', value: '0', hint: 'Last 24 hours' },
-  { icon: Ticket, label: 'Bookings', value: '0', hint: 'Pending' },
-  { icon: BadgeCheck, label: 'Saves', value: '0', hint: 'This week' },
-]
-
 type BusinessAuthMode = 'signup' | 'login'
 type BusinessPageMode = 'landing' | 'dashboard'
 
@@ -59,6 +52,7 @@ type BusinessPageProps = {
 
 export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
   const [business, setBusiness] = useState<BusinessAccount | null>(null)
+  const [dashboard, setDashboard] = useState<BusinessDashboard | null>(null)
   const [authMode, setAuthMode] = useState<BusinessAuthMode | null>(initialAuth ?? null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -76,6 +70,18 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
       .catch(() => undefined)
       .finally(() => setCheckedSession(true))
   }, [])
+
+  useEffect(() => {
+    if (mode !== 'dashboard' || !business) {
+      return
+    }
+
+    businessApi.dashboard()
+      .then(setDashboard)
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Could not load business dashboard')
+      })
+  }, [mode, business])
 
   async function signup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -147,14 +153,46 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
     }
   }
 
-  function saveTodayUpdate(event: FormEvent<HTMLFormElement>) {
+  async function saveTodayUpdate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setSuccess('Today update saved for dashboard review.')
+    setBusy('today')
+    setError(null)
+    setSuccess(null)
+    const form = new FormData(event.currentTarget)
+    try {
+      const updated = await businessApi.updateDashboard({
+        today_update: String(form.get('today_update')),
+        today_highlight: String(form.get('today_highlight')),
+      })
+      setDashboard(updated)
+      setSuccess('Today update saved.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save today update')
+    } finally {
+      setBusy(null)
+    }
   }
 
-  function saveOffer(event: FormEvent<HTMLFormElement>) {
+  async function saveOffer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setSuccess('Offer saved. Offer tracking will appear here once users start clicking.')
+    setBusy('offer')
+    setError(null)
+    setSuccess(null)
+    const form = new FormData(event.currentTarget)
+    try {
+      const updated = await businessApi.updateDashboard({
+        offer_title: String(form.get('offer_title')),
+        offer_details: String(form.get('offer_details')),
+        offer_valid_until: String(form.get('valid_until')),
+        offer_status: 'active',
+      })
+      setDashboard(updated)
+      setSuccess('Live offer saved.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save live offer')
+    } finally {
+      setBusy(null)
+    }
   }
 
   function logout() {
@@ -186,6 +224,13 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
   }
 
   if (mode === 'dashboard' && business) {
+    const dashboardStats = [
+      { icon: BarChart3, label: 'Offer clicks', value: dashboard?.offer_clicks ?? 0, hint: 'Today' },
+      { icon: Users, label: 'Profile visits', value: dashboard?.profile_visits ?? 0, hint: 'Last 24 hours' },
+      { icon: Ticket, label: 'Bookings', value: dashboard?.bookings.length ?? 0, hint: 'Pending' },
+      { icon: BadgeCheck, label: 'Saves', value: dashboard?.saves ?? 0, hint: 'This week' },
+    ]
+
     return (
       <main className="business-dashboard-shell">
         <aside className="business-dashboard-sidebar">
@@ -209,7 +254,7 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
             <div>
               <p className="business-label">Business dashboard</p>
               <h1>{business.business_name}</h1>
-              <span>{business.business_category} · {business.location}</span>
+              <span>{business.business_category} - {business.location}</span>
             </div>
             <Link className="business-secondary dark" to="/business">
               View landing
@@ -242,18 +287,24 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
               <form className="business-form-preview" onSubmit={saveTodayUpdate}>
                 <label>
                   Today message
-                  <textarea
-                    name="today_update"
-                    placeholder="Example: Live music tonight from 8 PM, new tandoori platter, or seats available for dinner."
-                  />
-                </label>
-                <label>
-                  Highlight
-                  <input name="today_highlight" placeholder="Example: Dinner special, new menu, weekend trip" />
-                </label>
-                <button className="business-primary">
-                  <Save size={18} /> Save today update
-                </button>
+                <textarea
+                  name="today_update"
+                  defaultValue={dashboard?.today_update ?? ''}
+                  placeholder="Example: Live music tonight from 8 PM, new tandoori platter, or seats available for dinner."
+                />
+              </label>
+              <label>
+                Highlight
+                <input
+                  name="today_highlight"
+                  defaultValue={dashboard?.today_highlight ?? ''}
+                  placeholder="Example: Dinner special, new menu, weekend trip"
+                />
+              </label>
+              <button className="business-primary" disabled={busy === 'today'}>
+                <Save size={18} />
+                {busy === 'today' ? 'Saving update' : 'Save today update'}
+              </button>
               </form>
             </article>
 
@@ -267,20 +318,33 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
               </div>
               <form className="business-form-preview" onSubmit={saveOffer}>
                 <label>
-                  Offer title
-                  <input name="offer_title" placeholder="Example: 20% off lunch buffet" />
-                </label>
-                <label>
-                  Offer details
-                  <textarea name="offer_details" placeholder="Tell users what is included and how to claim it." />
-                </label>
-                <label>
-                  Valid until
-                  <input name="valid_until" type="date" />
-                </label>
-                <button className="business-primary">
-                  <Save size={18} /> Save live offer
-                </button>
+                Offer title
+                <input
+                  name="offer_title"
+                  defaultValue={dashboard?.offer_title ?? ''}
+                  placeholder="Example: 20% off lunch buffet"
+                />
+              </label>
+              <label>
+                Offer details
+                <textarea
+                  name="offer_details"
+                  defaultValue={dashboard?.offer_details ?? ''}
+                  placeholder="Tell users what is included and how to claim it."
+                />
+              </label>
+              <label>
+                Valid until
+                <input
+                  name="valid_until"
+                  defaultValue={dashboard?.offer_valid_until ?? ''}
+                  type="date"
+                />
+              </label>
+              <button className="business-primary" disabled={busy === 'offer'}>
+                <Save size={18} />
+                {busy === 'offer' ? 'Saving offer' : 'Save live offer'}
+              </button>
               </form>
             </article>
           </section>
@@ -294,11 +358,23 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
                   <h2>User booking requests</h2>
                 </div>
               </div>
-              <div className="business-booking-empty">
-                <ClipboardList size={30} />
-                <strong>No booking requests yet</strong>
-                <span>When users book tables, trips, tickets, or events, requests will appear here.</span>
-              </div>
+              {dashboard?.bookings.length ? (
+                <div className="business-booking-list">
+                  {dashboard.bookings.map((booking) => (
+                    <div key={booking.id}>
+                      <strong>{booking.requester_name}</strong>
+                      <span>{booking.booking_note ?? 'Booking request'}</span>
+                      <small>{booking.status}</small>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="business-booking-empty">
+                  <ClipboardList size={30} />
+                  <strong>No booking requests yet</strong>
+                  <span>When users book tables, trips, tickets, or events, requests will appear here.</span>
+                </div>
+              )}
             </article>
 
             <article className="business-control-panel">
@@ -312,15 +388,15 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
               <div className="business-tracking-list">
                 <div>
                   <span>Live offer clicks</span>
-                  <strong>0</strong>
+                  <strong>{dashboard?.offer_clicks ?? 0}</strong>
                 </div>
                 <div>
                   <span>Booking intent clicks</span>
-                  <strong>0</strong>
+                  <strong>{dashboard?.booking_clicks ?? 0}</strong>
                 </div>
                 <div>
                   <span>Direction clicks</span>
-                  <strong>0</strong>
+                  <strong>{dashboard?.direction_clicks ?? 0}</strong>
                 </div>
               </div>
             </article>

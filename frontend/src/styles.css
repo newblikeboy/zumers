@@ -1141,6 +1141,30 @@ a {
   font-size: 1.1rem;
 }
 
+.business-booking-list {
+  display: grid;
+  gap: 10px;
+}
+
+.business-booking-list div {
+  background: #f8fafc;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+}
+
+.business-booking-list strong {
+  color: #111827;
+}
+
+.business-booking-list span,
+.business-booking-list small {
+  color: #667085;
+  font-weight: 750;
+}
+
 .business-tracking-list {
   display: grid;
   gap: 12px;

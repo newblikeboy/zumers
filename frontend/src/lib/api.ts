@@ -2,6 +2,7 @@ import type {
   AuthResponse,
   BusinessAccount,
   BusinessAuthResponse,
+  BusinessDashboard,
   CloudinarySignature,
   Conversation,
   Comment,
@@ -294,6 +295,14 @@ export const businessApi = {
 
   update: (body: Partial<BusinessAccount>) =>
     businessApiRequest<BusinessAccount>('/business/me', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  dashboard: () => businessApiRequest<BusinessDashboard>('/business/dashboard'),
+
+  updateDashboard: (body: Partial<BusinessDashboard>) =>
+    businessApiRequest<BusinessDashboard>('/business/dashboard', {
       method: 'PATCH',
       body: JSON.stringify(body),
     }),

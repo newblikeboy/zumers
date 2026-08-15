@@ -46,6 +46,33 @@ export type BusinessAuthResponse = {
   business: BusinessAccount
 }
 
+export type BusinessBookingRequest = {
+  id: number
+  requester_name: string
+  requester_contact?: string
+  booking_note?: string
+  booking_time?: string
+  status: 'pending' | 'confirmed' | 'declined' | 'completed'
+  created_at: string
+  updated_at: string
+}
+
+export type BusinessDashboard = {
+  today_update?: string
+  today_highlight?: string
+  offer_title?: string
+  offer_details?: string
+  offer_valid_until?: string
+  offer_status: 'draft' | 'active' | 'paused'
+  offer_clicks: number
+  profile_visits: number
+  booking_clicks: number
+  direction_clicks: number
+  saves: number
+  updated_at: string
+  bookings: BusinessBookingRequest[]
+}
+
 export type PostMediaInput = {
   media_type: 'image' | 'video'
   cloudinary_public_id: string
