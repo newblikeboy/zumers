@@ -1,17 +1,24 @@
 import {
   ArrowRight,
   BadgeCheck,
+  BarChart3,
   Building2,
   Bus,
   CalendarDays,
   CheckCircle2,
   Clock3,
+  ClipboardList,
   ForkKnife,
   LogOut,
   MapPin,
+  Megaphone,
+  Percent,
   Save,
   Store,
+  Ticket,
+  Users,
   Utensils,
+  X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
@@ -35,19 +42,33 @@ const onboardingSteps = [
   'Verification, visibility settings, and offers',
 ]
 
-type BusinessPageMode = 'landing' | 'signup' | 'login' | 'dashboard'
+const dashboardStats = [
+  { icon: BarChart3, label: 'Offer clicks', value: '0', hint: 'Today' },
+  { icon: Users, label: 'Profile visits', value: '0', hint: 'Last 24 hours' },
+  { icon: Ticket, label: 'Bookings', value: '0', hint: 'Pending' },
+  { icon: BadgeCheck, label: 'Saves', value: '0', hint: 'This week' },
+]
+
+type BusinessAuthMode = 'signup' | 'login'
+type BusinessPageMode = 'landing' | 'dashboard'
 
 type BusinessPageProps = {
   mode: BusinessPageMode
+  initialAuth?: BusinessAuthMode
 }
 
-export function BusinessPage({ mode }: BusinessPageProps) {
+export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
   const [business, setBusiness] = useState<BusinessAccount | null>(null)
+  const [authMode, setAuthMode] = useState<BusinessAuthMode | null>(initialAuth ?? null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [checkedSession, setCheckedSession] = useState(false)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    setAuthMode(initialAuth ?? null)
+  }, [initialAuth])
 
   useEffect(() => {
     businessApi.me()
@@ -72,7 +93,6 @@ export function BusinessPage({ mode }: BusinessPageProps) {
         password: String(form.get('password')),
       })
       setBusiness(response.business)
-      setSuccess('Business account created. Complete onboarding details below.')
       navigate('/business/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Business signup failed')
@@ -93,7 +113,6 @@ export function BusinessPage({ mode }: BusinessPageProps) {
         password: String(form.get('password')),
       })
       setBusiness(response.business)
-      setSuccess('Logged in. Continue your business onboarding.')
       navigate('/business/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Business login failed')
@@ -128,21 +147,244 @@ export function BusinessPage({ mode }: BusinessPageProps) {
     }
   }
 
+  function saveTodayUpdate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSuccess('Today update saved for dashboard review.')
+  }
+
+  function saveOffer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setSuccess('Offer saved. Offer tracking will appear here once users start clicking.')
+  }
+
   function logout() {
     businessApi.logout()
     setBusiness(null)
-    setSuccess('Business session ended.')
-    navigate('/business/login')
+    navigate('/business')
+  }
+
+  function openAuth(modeToOpen: BusinessAuthMode) {
+    setError(null)
+    setSuccess(null)
+    setAuthMode(modeToOpen)
+  }
+
+  function closeAuth() {
+    setError(null)
+    setAuthMode(null)
+    if (initialAuth) {
+      navigate('/business', { replace: true })
+    }
+  }
+
+  if (mode === 'dashboard' && !checkedSession) {
+    return <div className="boot-screen">Loading business dashboard</div>
   }
 
   if (mode === 'dashboard' && checkedSession && !business) {
-    return <Navigate to="/business/login" replace />
+    return <Navigate to="/business" replace />
   }
 
-  const showLandingContent = mode === 'landing'
-  const showSignup = mode === 'signup'
-  const showLogin = mode === 'login'
-  const showDashboard = mode === 'dashboard'
+  if (mode === 'dashboard' && business) {
+    return (
+      <main className="business-dashboard-shell">
+        <aside className="business-dashboard-sidebar">
+          <Link className="business-dashboard-brand" to="/business">
+            <span>Z</span>
+            <strong>Zumers Business</strong>
+          </Link>
+          <nav>
+            <a href="#today">Today</a>
+            <a href="#offers">Offers</a>
+            <a href="#bookings">Bookings</a>
+            <a href="#onboarding">Onboarding</a>
+          </nav>
+          <button type="button" onClick={logout}>
+            <LogOut size={18} /> Logout
+          </button>
+        </aside>
+
+        <section className="business-dashboard-main">
+          <header className="business-dashboard-top">
+            <div>
+              <p className="business-label">Business dashboard</p>
+              <h1>{business.business_name}</h1>
+              <span>{business.business_category} · {business.location}</span>
+            </div>
+            <Link className="business-secondary dark" to="/business">
+              View landing
+            </Link>
+          </header>
+
+          <ErrorBanner message={error} />
+          {success ? <div className="business-success">{success}</div> : null}
+
+          <section className="business-stat-grid" aria-label="Business performance">
+            {dashboardStats.map((stat) => (
+              <article key={stat.label}>
+                <stat.icon size={22} />
+                <strong>{stat.value}</strong>
+                <span>{stat.label}</span>
+                <small>{stat.hint}</small>
+              </article>
+            ))}
+          </section>
+
+          <section className="business-control-grid">
+            <article className="business-control-panel" id="today">
+              <div className="business-panel-heading">
+                <Megaphone size={24} />
+                <div>
+                  <p className="business-label">What is new today</p>
+                  <h2>Post a fresh business update</h2>
+                </div>
+              </div>
+              <form className="business-form-preview" onSubmit={saveTodayUpdate}>
+                <label>
+                  Today message
+                  <textarea
+                    name="today_update"
+                    placeholder="Example: Live music tonight from 8 PM, new tandoori platter, or seats available for dinner."
+                  />
+                </label>
+                <label>
+                  Highlight
+                  <input name="today_highlight" placeholder="Example: Dinner special, new menu, weekend trip" />
+                </label>
+                <button className="business-primary">
+                  <Save size={18} /> Save today update
+                </button>
+              </form>
+            </article>
+
+            <article className="business-control-panel" id="offers">
+              <div className="business-panel-heading">
+                <Percent size={24} />
+                <div>
+                  <p className="business-label">Live offer</p>
+                  <h2>Publish discount or deal</h2>
+                </div>
+              </div>
+              <form className="business-form-preview" onSubmit={saveOffer}>
+                <label>
+                  Offer title
+                  <input name="offer_title" placeholder="Example: 20% off lunch buffet" />
+                </label>
+                <label>
+                  Offer details
+                  <textarea name="offer_details" placeholder="Tell users what is included and how to claim it." />
+                </label>
+                <label>
+                  Valid until
+                  <input name="valid_until" type="date" />
+                </label>
+                <button className="business-primary">
+                  <Save size={18} /> Save live offer
+                </button>
+              </form>
+            </article>
+          </section>
+
+          <section className="business-control-grid">
+            <article className="business-control-panel" id="bookings">
+              <div className="business-panel-heading">
+                <Ticket size={24} />
+                <div>
+                  <p className="business-label">Bookings</p>
+                  <h2>User booking requests</h2>
+                </div>
+              </div>
+              <div className="business-booking-empty">
+                <ClipboardList size={30} />
+                <strong>No booking requests yet</strong>
+                <span>When users book tables, trips, tickets, or events, requests will appear here.</span>
+              </div>
+            </article>
+
+            <article className="business-control-panel">
+              <div className="business-panel-heading">
+                <BarChart3 size={24} />
+                <div>
+                  <p className="business-label">Tracking</p>
+                  <h2>Offer performance</h2>
+                </div>
+              </div>
+              <div className="business-tracking-list">
+                <div>
+                  <span>Live offer clicks</span>
+                  <strong>0</strong>
+                </div>
+                <div>
+                  <span>Booking intent clicks</span>
+                  <strong>0</strong>
+                </div>
+                <div>
+                  <span>Direction clicks</span>
+                  <strong>0</strong>
+                </div>
+              </div>
+            </article>
+          </section>
+
+          <section className="business-control-panel" id="onboarding">
+            <div className="business-panel-heading">
+              <Building2 size={24} />
+              <div>
+                <p className="business-label">Onboarding</p>
+                <h2>Business details</h2>
+              </div>
+            </div>
+            <form className="business-form-preview business-onboarding-form" onSubmit={saveOnboarding}>
+              <label>
+                Business name
+                <input name="business_name" defaultValue={business.business_name} required />
+              </label>
+              <label>
+                Category
+                <input name="business_category" defaultValue={business.business_category} required />
+              </label>
+              <label>
+                Location
+                <input name="location" defaultValue={business.location} required />
+              </label>
+              <label>
+                Contact phone
+                <input name="contact_phone" defaultValue={business.contact_phone ?? ''} />
+              </label>
+              <label>
+                Business description
+                <textarea
+                  name="description"
+                  defaultValue={business.description ?? ''}
+                  placeholder="Tell users what makes this place worth visiting."
+                />
+              </label>
+              <label>
+                Menu, packages, events, or services
+                <textarea
+                  name="offerings"
+                  defaultValue={business.offerings ?? ''}
+                  placeholder="Popular dishes, travel packages, event details, offers, or services."
+                />
+              </label>
+              <label>
+                Opening hours
+                <input
+                  name="opening_hours"
+                  defaultValue={business.opening_hours ?? ''}
+                  placeholder="Example: Mon-Sun, 11 AM - 11 PM"
+                />
+              </label>
+              <button className="business-primary" disabled={busy === 'onboarding'}>
+                <Save size={18} />
+                {busy === 'onboarding' ? 'Saving onboarding' : 'Submit onboarding'}
+              </button>
+            </form>
+          </section>
+        </section>
+      </main>
+    )
+  }
 
   return (
     <main className="business-page">
@@ -157,9 +399,8 @@ export function BusinessPage({ mode }: BusinessPageProps) {
             <strong>Zumers Business</strong>
           </Link>
           <nav>
-            <Link to="/business">Overview</Link>
-            <Link to="/business/signup">Signup</Link>
-            <Link to="/business/login">Login</Link>
+            <button type="button" onClick={() => openAuth('signup')}>Signup</button>
+            <button type="button" onClick={() => openAuth('login')}>Login</button>
             {business ? <Link to="/business/dashboard">Dashboard</Link> : null}
           </nav>
         </header>
@@ -175,206 +416,172 @@ export function BusinessPage({ mode }: BusinessPageProps) {
             get discovered by users looking for what to do today.
           </p>
           <div className="business-actions">
-            <Link className="business-primary" to="/business/signup">
+            <button className="business-primary" type="button" onClick={() => openAuth('signup')}>
               Register business <ArrowRight size={18} />
-            </Link>
-            <Link className="business-secondary" to="/business/login">
+            </button>
+            <button className="business-secondary" type="button" onClick={() => openAuth('login')}>
               Business login
-            </Link>
+            </button>
           </div>
         </div>
       </section>
 
-      {showLandingContent ? (
-        <>
-          <section className="business-category-strip" aria-label="Business categories">
-            {businessTypes.map((item) => (
-              <article key={item.title}>
-                <item.icon size={22} />
-                <div>
-                  <strong>{item.title}</strong>
-                  <span>{item.text}</span>
-                </div>
-              </article>
-            ))}
-          </section>
-
-          <section className="business-section business-onboarding" id="business-onboarding">
-            <div className="business-section-copy">
-              <p className="business-label">Onboarding platform</p>
-              <h2>Register once, complete the details that help people choose you.</h2>
-              <p>
-                After signup, businesses can log in and complete a structured
-                onboarding form. These details can power Zumers recommendations,
-                nearby discovery, reels, posts, and visit decisions for users.
-              </p>
-            </div>
-            <div className="business-checklist">
-              {onboardingSteps.map((step) => (
-                <div key={step}>
-                  <CheckCircle2 size={22} />
-                  <span>{step}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-        </>
-      ) : null}
-
-      {showSignup || showLogin ? (
-      <section className="business-section business-access-grid business-access-single">
-        {showSignup ? (
-        <article className="business-form-card" id="business-signup">
-          <div className="business-form-heading">
-            <Building2 size={26} />
+      <section className="business-category-strip" aria-label="Business categories">
+        {businessTypes.map((item) => (
+          <article key={item.title}>
+            <item.icon size={22} />
             <div>
-              <p className="business-label">Business signup</p>
-              <h2>Create your business account</h2>
+              <strong>{item.title}</strong>
+              <span>{item.text}</span>
             </div>
-          </div>
-          <form className="business-form-preview" onSubmit={signup}>
-            <label>
-              Business name
-              <input name="business_name" placeholder="Example: Johri Restaurant" required />
-            </label>
-            <label>
-              Business category
-              <select name="business_category" defaultValue="" required>
-                <option value="" disabled>Select category</option>
-                <option>Street food</option>
-                <option>Restaurant or cafe</option>
-                <option>Travel or transport</option>
-                <option>Event or experience</option>
-                <option>Other local service</option>
-              </select>
-            </label>
-            <label>
-              Location
-              <span className="business-input-icon">
-                <MapPin size={18} />
-                <input name="location" placeholder="City, area, landmark" required />
-              </span>
-            </label>
-            <label>
-              Contact phone
-              <input name="contact_phone" placeholder="Optional" />
-            </label>
-            <label>
-              Email
-              <input name="email" placeholder="owner@example.com" type="email" required />
-            </label>
-            <label>
-              Password
-              <input name="password" minLength={8} placeholder="Password" type="password" required />
-            </label>
-            <button className="business-primary" disabled={busy === 'signup'}>
-              {busy === 'signup' ? 'Creating account' : 'Continue onboarding'}
-              <ArrowRight size={18} />
-            </button>
-          </form>
-        </article>
-        ) : null}
-
-        {showLogin ? (
-        <article className="business-form-card business-login-card" id="business-login">
-          <div className="business-form-heading">
-            <BadgeCheck size={26} />
-            <div>
-              <p className="business-label">Business login</p>
-              <h2>Return to your onboarding</h2>
-            </div>
-          </div>
-          <form className="business-form-preview" onSubmit={login}>
-            <label>
-              Email
-              <input name="email" placeholder="owner@example.com" type="email" required />
-            </label>
-            <label>
-              Password
-              <input name="password" placeholder="Password" type="password" required />
-            </label>
-            <div className="business-login-note">
-              <Clock3 size={18} />
-              <span>Complete drafts, update details, and manage visibility.</span>
-            </div>
-            <button className="business-secondary dark" disabled={busy === 'login'}>
-              {busy === 'login' ? 'Logging in' : 'Login to dashboard'}
-            </button>
-          </form>
-        </article>
-        ) : null}
+          </article>
+        ))}
       </section>
-      ) : null}
 
-      {showDashboard ? (
-      <section className="business-section business-dashboard" id="business-dashboard">
-        <div className="business-dashboard-heading">
-          <div>
-            <p className="business-label">Business dashboard</p>
-            <h2>{business ? business.business_name : 'Login to complete onboarding'}</h2>
-          </div>
-          {business ? (
-            <button className="business-secondary dark" type="button" onClick={logout}>
-              <LogOut size={18} /> Logout
-            </button>
-          ) : null}
+      <section className="business-section business-onboarding" id="business-onboarding">
+        <div className="business-section-copy">
+          <p className="business-label">Business onboarding platform</p>
+          <h2>Register once, then control what Zumers users see today.</h2>
+          <p>
+            The business dashboard is where owners complete onboarding, publish
+            today&apos;s update, manage discounts, track offer clicks, and review
+            booking requests.
+          </p>
         </div>
-        <ErrorBanner message={error} />
-        {success ? <div className="business-success">{success}</div> : null}
-        {business ? (
-          <form className="business-form-preview business-onboarding-form" onSubmit={saveOnboarding}>
-            <label>
-              Business name
-              <input name="business_name" defaultValue={business.business_name} required />
-            </label>
-            <label>
-              Category
-              <input name="business_category" defaultValue={business.business_category} required />
-            </label>
-            <label>
-              Location
-              <input name="location" defaultValue={business.location} required />
-            </label>
-            <label>
-              Contact phone
-              <input name="contact_phone" defaultValue={business.contact_phone ?? ''} />
-            </label>
-            <label>
-              Business description
-              <textarea
-                name="description"
-                defaultValue={business.description ?? ''}
-                placeholder="Tell users what makes this place worth visiting."
-              />
-            </label>
-            <label>
-              Menu, packages, events, or services
-              <textarea
-                name="offerings"
-                defaultValue={business.offerings ?? ''}
-                placeholder="Popular dishes, travel packages, event details, offers, or services."
-              />
-            </label>
-            <label>
-              Opening hours
-              <input
-                name="opening_hours"
-                defaultValue={business.opening_hours ?? ''}
-                placeholder="Example: Mon-Sun, 11 AM - 11 PM"
-              />
-            </label>
-            <button className="business-primary" disabled={busy === 'onboarding'}>
-              <Save size={18} />
-              {busy === 'onboarding' ? 'Saving onboarding' : 'Submit onboarding'}
-            </button>
-          </form>
-        ) : (
-          <div className="business-empty-dashboard">
-            Create an account or log in above to open the onboarding form.
-          </div>
-        )}
+        <div className="business-checklist">
+          {onboardingSteps.map((step) => (
+            <div key={step}>
+              <CheckCircle2 size={22} />
+              <span>{step}</span>
+            </div>
+          ))}
+        </div>
       </section>
+
+      {authMode ? (
+        <div className="business-auth-overlay" role="dialog" aria-modal="true">
+          <article className="business-auth-modal">
+            <button className="business-auth-close" type="button" onClick={closeAuth} aria-label="Close">
+              <X size={22} />
+            </button>
+            <div className="business-auth-tabs">
+              <button
+                className={authMode === 'signup' ? 'active' : ''}
+                type="button"
+                onClick={() => openAuth('signup')}
+              >
+                Signup
+              </button>
+              <button
+                className={authMode === 'login' ? 'active' : ''}
+                type="button"
+                onClick={() => openAuth('login')}
+              >
+                Login
+              </button>
+            </div>
+            <ErrorBanner message={error} />
+            {authMode === 'signup' ? (
+              <BusinessSignupForm busy={busy} onSubmit={signup} />
+            ) : (
+              <BusinessLoginForm busy={busy} onSubmit={login} />
+            )}
+          </article>
+        </div>
       ) : null}
     </main>
+  )
+}
+
+function BusinessSignupForm({
+  busy,
+  onSubmit,
+}: {
+  busy: string | null
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+}) {
+  return (
+    <form className="business-form-preview" onSubmit={onSubmit}>
+      <div className="business-form-heading">
+        <Building2 size={26} />
+        <div>
+          <p className="business-label">Business signup</p>
+          <h2>Create your business account</h2>
+        </div>
+      </div>
+      <label>
+        Business name
+        <input name="business_name" placeholder="Example: Johri Restaurant" required />
+      </label>
+      <label>
+        Business category
+        <select name="business_category" defaultValue="" required>
+          <option value="" disabled>Select category</option>
+          <option>Street food</option>
+          <option>Restaurant or cafe</option>
+          <option>Travel or transport</option>
+          <option>Event or experience</option>
+          <option>Other local service</option>
+        </select>
+      </label>
+      <label>
+        Location
+        <span className="business-input-icon">
+          <MapPin size={18} />
+          <input name="location" placeholder="City, area, landmark" required />
+        </span>
+      </label>
+      <label>
+        Contact phone
+        <input name="contact_phone" placeholder="Optional" />
+      </label>
+      <label>
+        Email
+        <input name="email" placeholder="owner@example.com" type="email" required />
+      </label>
+      <label>
+        Password
+        <input name="password" minLength={8} placeholder="Password" type="password" required />
+      </label>
+      <button className="business-primary" disabled={busy === 'signup'}>
+        {busy === 'signup' ? 'Creating account' : 'Continue to dashboard'}
+        <ArrowRight size={18} />
+      </button>
+    </form>
+  )
+}
+
+function BusinessLoginForm({
+  busy,
+  onSubmit,
+}: {
+  busy: string | null
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+}) {
+  return (
+    <form className="business-form-preview" onSubmit={onSubmit}>
+      <div className="business-form-heading">
+        <BadgeCheck size={26} />
+        <div>
+          <p className="business-label">Business login</p>
+          <h2>Open your business dashboard</h2>
+        </div>
+      </div>
+      <label>
+        Email
+        <input name="email" placeholder="owner@example.com" type="email" required />
+      </label>
+      <label>
+        Password
+        <input name="password" placeholder="Password" type="password" required />
+      </label>
+      <div className="business-login-note">
+        <Clock3 size={18} />
+        <span>Manage today&apos;s update, offers, bookings, and onboarding.</span>
+      </div>
+      <button className="business-secondary dark" disabled={busy === 'login'}>
+        {busy === 'login' ? 'Logging in' : 'Login to dashboard'}
+      </button>
+    </form>
   )
 }
