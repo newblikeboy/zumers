@@ -750,6 +750,106 @@ a {
   color: #22c55e;
 }
 
+.business-proof-section {
+  display: grid;
+  gap: clamp(26px, 5vw, 60px);
+  grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+  padding-top: 18px;
+}
+
+.business-story-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.business-story-grid article {
+  background: #fff;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
+  display: grid;
+  gap: 10px;
+  padding: 20px;
+}
+
+.business-story-grid article > span {
+  background: #e0f2fe;
+  border-radius: 999px;
+  color: #0369a1;
+  font-size: 0.78rem;
+  font-weight: 950;
+  justify-self: start;
+  padding: 7px 10px;
+}
+
+.business-story-grid h3 {
+  color: #111827;
+  font-size: 1.2rem;
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.business-story-grid small {
+  color: #0ea5e9;
+  font-weight: 900;
+}
+
+.business-story-grid p {
+  color: #536071;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.business-current-section {
+  padding-top: 16px;
+}
+
+.business-current-heading {
+  align-items: end;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.business-current-heading h2 {
+  max-width: 720px;
+}
+
+.business-current-list {
+  display: grid;
+  gap: 12px;
+}
+
+.business-current-list article {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.07);
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  padding: 18px 20px;
+}
+
+.business-current-list strong,
+.business-current-list span {
+  display: block;
+}
+
+.business-current-list strong {
+  color: #111827;
+  font-size: 1.05rem;
+}
+
+.business-current-list span,
+.business-current-list small {
+  color: #667085;
+  font-weight: 800;
+}
+
 .business-form-card {
   background: #fff;
   border: 1px solid #dbe3ef;
@@ -1220,8 +1320,18 @@ a {
 
   .business-onboarding,
   .business-access-grid,
+  .business-proof-section,
   .business-onboarding-form {
     grid-template-columns: 1fr;
+  }
+
+  .business-story-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .business-current-heading {
+    align-items: stretch;
+    display: grid;
   }
 
   .business-dashboard-shell {
@@ -1352,6 +1462,11 @@ a {
   .business-category-strip {
     grid-template-columns: 1fr;
     margin-top: -34px;
+  }
+
+  .business-current-list article {
+    align-items: start;
+    display: grid;
   }
 
   .business-form-heading {

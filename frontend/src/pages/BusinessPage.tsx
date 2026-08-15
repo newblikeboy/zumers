@@ -43,6 +43,33 @@ const onboardingSteps = [
   'Verification, visibility settings, and offers',
 ]
 
+const successStories = [
+  {
+    name: 'Local food counter',
+    category: 'Street food',
+    result: 'Turned daily specials into repeat evening visits.',
+    metric: 'Daily updates',
+  },
+  {
+    name: 'Neighborhood cafe',
+    category: 'Restaurant',
+    result: 'Used live offers to bring customers during quiet hours.',
+    metric: 'Offer clicks',
+  },
+  {
+    name: 'Weekend trip operator',
+    category: 'Travel',
+    result: 'Made packages easier for groups to discover and book.',
+    metric: 'Booking intent',
+  },
+]
+
+const onboardingBusinesses = [
+  { name: 'Johri Restaurant', category: 'Restaurant or cafe', location: 'Rajouri Garden, New Delhi' },
+  { name: 'Street bites partner', category: 'Street food', location: 'Delhi NCR' },
+  { name: 'Weekend travel host', category: 'Travel or transport', location: 'North India' },
+]
+
 type BusinessAuthMode = 'signup' | 'login'
 type BusinessPageMode = 'landing' | 'dashboard'
 
@@ -531,6 +558,51 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
               <CheckCircle2 size={22} />
               <span>{step}</span>
             </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="business-section business-proof-section">
+        <div className="business-section-copy">
+          <p className="business-label">Successful stories</p>
+          <h2>Built for businesses that need today&apos;s attention.</h2>
+          <p>
+            Zumers Business is designed around practical local discovery:
+            fresh updates, live offers, booking intent, and clear visibility
+            into what users are clicking.
+          </p>
+        </div>
+        <div className="business-story-grid">
+          {successStories.map((story) => (
+            <article key={story.name}>
+              <span>{story.metric}</span>
+              <h3>{story.name}</h3>
+              <small>{story.category}</small>
+              <p>{story.result}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="business-section business-current-section">
+        <div className="business-current-heading">
+          <div>
+            <p className="business-label">Currently onboarding businesses</p>
+            <h2>New places are preparing to go live on Zumers.</h2>
+          </div>
+          <button className="business-secondary dark" type="button" onClick={() => openAuth('signup')}>
+            Start onboarding
+          </button>
+        </div>
+        <div className="business-current-list">
+          {onboardingBusinesses.map((item) => (
+            <article key={item.name}>
+              <div>
+                <strong>{item.name}</strong>
+                <span>{item.category}</span>
+              </div>
+              <small>{item.location}</small>
+            </article>
           ))}
         </div>
       </section>
