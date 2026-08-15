@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import heroImage from '../assets/zumers-landing-hero.png'
+import { businessUrl } from '../lib/businessRoutes'
 
 const moments = [
   {
@@ -53,7 +54,7 @@ export function LandingPage() {
           </Link>
           <nav>
             <a href="#how-it-works">How it works</a>
-            <Link to="/business">Business</Link>
+            <a href={businessUrl()}>Business</a>
             <a href="#why-zumers">Why Zumers</a>
             <Link to="/login">Log in</Link>
             <Link className="landing-nav-cta" to="/signup">

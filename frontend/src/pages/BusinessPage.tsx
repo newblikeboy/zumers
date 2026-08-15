@@ -26,6 +26,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { ErrorBanner } from '../components/ErrorBanner'
 import businessHero from '../assets/zumers-business-hero.png'
 import { businessApi } from '../lib/api'
+import { businessPath } from '../lib/businessRoutes'
 import type { BusinessAccount, BusinessDashboard } from '../lib/types'
 
 const businessTypes = [
@@ -99,7 +100,7 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
         password: String(form.get('password')),
       })
       setBusiness(response.business)
-      navigate('/business/dashboard')
+      navigate(businessPath('/dashboard'))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Business signup failed')
     } finally {
@@ -119,7 +120,7 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
         password: String(form.get('password')),
       })
       setBusiness(response.business)
-      navigate('/business/dashboard')
+      navigate(businessPath('/dashboard'))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Business login failed')
     } finally {
@@ -198,7 +199,7 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
   function logout() {
     businessApi.logout()
     setBusiness(null)
-    navigate('/business')
+    navigate(businessPath())
   }
 
   function openAuth(modeToOpen: BusinessAuthMode) {
@@ -211,7 +212,7 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
     setError(null)
     setAuthMode(null)
     if (initialAuth) {
-      navigate('/business', { replace: true })
+      navigate(businessPath(), { replace: true })
     }
   }
 
@@ -220,7 +221,7 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
   }
 
   if (mode === 'dashboard' && checkedSession && !business) {
-    return <Navigate to="/business" replace />
+    return <Navigate to={businessPath()} replace />
   }
 
   if (mode === 'dashboard' && business) {
@@ -234,7 +235,7 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
     return (
       <main className="business-dashboard-shell">
         <aside className="business-dashboard-sidebar">
-          <Link className="business-dashboard-brand" to="/business">
+          <Link className="business-dashboard-brand" to={businessPath()}>
             <span>Z</span>
             <strong>Zumers Business</strong>
           </Link>
@@ -256,7 +257,7 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
               <h1>{business.business_name}</h1>
               <span>{business.business_category} - {business.location}</span>
             </div>
-            <Link className="business-secondary dark" to="/business">
+            <Link className="business-secondary dark" to={businessPath()}>
               View landing
             </Link>
           </header>
@@ -477,7 +478,7 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
           <nav>
             <button type="button" onClick={() => openAuth('signup')}>Signup</button>
             <button type="button" onClick={() => openAuth('login')}>Login</button>
-            {business ? <Link to="/business/dashboard">Dashboard</Link> : null}
+            {business ? <Link to={businessPath('/dashboard')}>Dashboard</Link> : null}
           </nav>
         </header>
 
