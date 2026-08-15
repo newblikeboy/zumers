@@ -53,6 +53,7 @@ export function LandingPage() {
           </Link>
           <nav>
             <a href="#how-it-works">How it works</a>
+            <Link to="/business">Business</Link>
             <a href="#why-zumers">Why Zumers</a>
             <Link to="/login">Log in</Link>
             <Link className="landing-nav-cta" to="/signup">
@@ -69,7 +70,7 @@ export function LandingPage() {
           <p className="landing-tagline">Never wonder what to do today.</p>
           <p className="landing-copy">
             A social decision platform where friends discover ideas, vote on
-            plans, share reels, and move from “what now?” to “let’s go.”
+            plans, share reels, and move from "what now?" to "let's go."
           </p>
           <div className="landing-actions">
             <Link className="landing-primary" to="/signup">
@@ -91,7 +92,7 @@ export function LandingPage() {
       <section className="landing-section landing-two-column" id="how-it-works">
         <div>
           <p className="landing-section-label">How it works</p>
-          <h2>From “any plans?” to a shared decision.</h2>
+          <h2>From "any plans?" to a shared decision.</h2>
           <p>
             Zumers brings feed, reels, friends, and chat into one flow so people
             can discover, compare, and commit without losing momentum.
@@ -164,3 +165,4 @@ export function LandingPage() {
     </main>
   )
 }
+

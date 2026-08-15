@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './auth/AuthContext'
 import { AppLayout } from './components/AppLayout'
 import { AuthPage } from './pages/AuthPage'
+import { BusinessPage } from './pages/BusinessPage'
 import { ChatPage } from './pages/ChatPage'
 import { FeedPage } from './pages/FeedPage'
 import { FriendsPage } from './pages/FriendsPage'
@@ -29,6 +30,7 @@ function App() {
           user ? <Navigate to="/" replace /> : <AuthPage mode="signup" />
         }
       />
+      <Route path="/business" element={<BusinessPage />} />
       <Route
         path="/"
         element={user ? <AppLayout /> : <LandingPage />}
