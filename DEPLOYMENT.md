@@ -68,7 +68,7 @@ go build -o bin/zumers-api ./cmd/api
 go build -o bin/zumers-migrate ./cmd/migrate
 
 sudo chown -R zumers:zumers /opt/zumers/backend
-sudo -u zumers bash -lc 'set -a; source /etc/zumers/backend.env; set +a; cd /opt/zumers/backend && ./bin/zumers-migrate up'
+set -a; source /etc/zumers/backend.env; set +a; cd /opt/zumers/backend && ./bin/zumers-migrate up
 ```
 
 ## 5. Build Frontend
