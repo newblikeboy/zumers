@@ -71,11 +71,6 @@ export function FriendsPage() {
     try {
       const response = await api.searchUsers(trimmedQuery)
       const friendIDs = new Set(friends.map((friend) => friend.id))
-      const outgoingIDs = new Set(
-        outgoing
-          .filter((request) => request.status === 'pending')
-          .map((request) => request.receiver_id),
-      )
       const incomingIDs = new Set(
         requests
           .filter((request) => request.status === 'pending')
@@ -86,7 +81,6 @@ export function FriendsPage() {
           (person) =>
             person.id !== user?.id &&
             !friendIDs.has(person.id) &&
-            !outgoingIDs.has(person.id) &&
             !incomingIDs.has(person.id),
         ),
       )
@@ -101,7 +95,6 @@ export function FriendsPage() {
     try {
       await api.sendFriendRequest(person.id)
       await load()
-      setResults((current) => current.filter((item) => item.id !== person.id))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Friend request failed')
     } finally {
@@ -168,6 +161,15 @@ export function FriendsPage() {
         ? results
         : [...outgoing.map((request) => request.receiver).filter(Boolean)] as User[],
     [outgoing, results],
+  )
+  const pendingOutgoingReceiverIDs = useMemo(
+    () =>
+      new Set(
+        outgoing
+          .filter((request) => request.status === 'pending')
+          .map((request) => request.receiver_id),
+      ),
+    [outgoing],
   )
 
   return (
@@ -289,24 +291,35 @@ export function FriendsPage() {
             <EmptyState title="Search to find friend suggestions" />
           ) : null}
           <div className="friend-card-grid">
-            {suggestions.map((person) => (
-              <FriendTile key={person.id} person={person}>
-                <button
-                  className="primary-button"
-                  disabled={busyAction === `send-${person.id}`}
-                  onClick={() => sendRequest(person)}
-                >
-                  <UserPlus size={17} />
-                  <span>
-                    {busyAction === `send-${person.id}` ? 'Sending' : 'Add friend'}
-                  </span>
-                </button>
-                <button className="small-button muted" type="button">
-                  <X size={17} />
-                  <span>Remove</span>
-                </button>
-              </FriendTile>
-            ))}
+            {suggestions.map((person) => {
+              const requestSent = pendingOutgoingReceiverIDs.has(person.id)
+              return (
+                <FriendTile key={person.id} person={person}>
+                  <button
+                    className={requestSent ? 'small-button muted' : 'primary-button'}
+                    disabled={requestSent || busyAction === `send-${person.id}`}
+                    onClick={() => {
+                      if (!requestSent) sendRequest(person)
+                    }}
+                  >
+                    {requestSent ? <Check size={17} /> : <UserPlus size={17} />}
+                    <span>
+                      {requestSent
+                        ? 'Request sent'
+                        : busyAction === `send-${person.id}`
+                          ? 'Sending'
+                          : 'Add friend'}
+                    </span>
+                  </button>
+                  {!requestSent ? (
+                    <button className="small-button muted" type="button">
+                      <X size={17} />
+                      <span>Remove</span>
+                    </button>
+                  ) : null}
+                </FriendTile>
+              )
+            })}
           </div>
         </section>
 
