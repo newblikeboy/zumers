@@ -5,6 +5,7 @@ import { AuthPage } from './pages/AuthPage'
 import { ChatPage } from './pages/ChatPage'
 import { FeedPage } from './pages/FeedPage'
 import { FriendsPage } from './pages/FriendsPage'
+import { LandingPage } from './pages/LandingPage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ReelsPage } from './pages/ReelsPage'
@@ -30,7 +31,7 @@ function App() {
       />
       <Route
         path="/"
-        element={user ? <AppLayout /> : <Navigate to="/login" replace />}
+        element={user ? <AppLayout /> : <LandingPage />}
       >
         <Route index element={<FeedPage />} />
         <Route path="reels" element={<ReelsPage />} />
