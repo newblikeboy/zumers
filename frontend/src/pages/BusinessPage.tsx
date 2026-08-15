@@ -7,12 +7,19 @@ import {
   CheckCircle2,
   Clock3,
   ForkKnife,
+  LogOut,
   MapPin,
+  Save,
   Store,
   Utensils,
 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { ErrorBanner } from '../components/ErrorBanner'
 import businessHero from '../assets/zumers-business-hero.png'
+import { businessApi } from '../lib/api'
+import type { BusinessAccount } from '../lib/types'
 
 const businessTypes = [
   { icon: Utensils, title: 'Street food', text: 'Food carts, local stalls, snacks, and late-night favorites.' },
@@ -29,6 +36,93 @@ const onboardingSteps = [
 ]
 
 export function BusinessPage() {
+  const [business, setBusiness] = useState<BusinessAccount | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  useEffect(() => {
+    businessApi.me().then(setBusiness).catch(() => undefined)
+  }, [])
+
+  async function signup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBusy('signup')
+    setError(null)
+    setSuccess(null)
+    const form = new FormData(event.currentTarget)
+    try {
+      const response = await businessApi.signup({
+        business_name: String(form.get('business_name')),
+        business_category: String(form.get('business_category')),
+        location: String(form.get('location')),
+        contact_phone: String(form.get('contact_phone')),
+        email: String(form.get('email')),
+        password: String(form.get('password')),
+      })
+      setBusiness(response.business)
+      setSuccess('Business account created. Complete onboarding details below.')
+      window.location.hash = 'business-dashboard'
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Business signup failed')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function login(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBusy('login')
+    setError(null)
+    setSuccess(null)
+    const form = new FormData(event.currentTarget)
+    try {
+      const response = await businessApi.login({
+        email: String(form.get('email')),
+        password: String(form.get('password')),
+      })
+      setBusiness(response.business)
+      setSuccess('Logged in. Continue your business onboarding.')
+      window.location.hash = 'business-dashboard'
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Business login failed')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  async function saveOnboarding(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBusy('onboarding')
+    setError(null)
+    setSuccess(null)
+    const form = new FormData(event.currentTarget)
+    try {
+      const updated = await businessApi.update({
+        business_name: String(form.get('business_name')),
+        business_category: String(form.get('business_category')),
+        location: String(form.get('location')),
+        contact_phone: String(form.get('contact_phone')),
+        description: String(form.get('description')),
+        offerings: String(form.get('offerings')),
+        opening_hours: String(form.get('opening_hours')),
+        onboarding_status: 'submitted',
+      })
+      setBusiness(updated)
+      setSuccess('Business onboarding submitted.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save onboarding')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  function logout() {
+    businessApi.logout()
+    setBusiness(null)
+    setSuccess('Business session ended.')
+  }
+
   return (
     <main className="business-page">
       <section
@@ -110,14 +204,14 @@ export function BusinessPage() {
               <h2>Create your business account</h2>
             </div>
           </div>
-          <form className="business-form-preview">
+          <form className="business-form-preview" onSubmit={signup}>
             <label>
               Business name
-              <input placeholder="Example: Sharma Street Bites" />
+              <input name="business_name" placeholder="Example: Johri Restaurant" required />
             </label>
             <label>
               Business category
-              <select defaultValue="">
+              <select name="business_category" defaultValue="" required>
                 <option value="" disabled>Select category</option>
                 <option>Street food</option>
                 <option>Restaurant or cafe</option>
@@ -130,11 +224,24 @@ export function BusinessPage() {
               Location
               <span className="business-input-icon">
                 <MapPin size={18} />
-                <input placeholder="City, area, landmark" />
+                <input name="location" placeholder="City, area, landmark" required />
               </span>
             </label>
-            <button className="business-primary" type="button">
-              Continue onboarding <ArrowRight size={18} />
+            <label>
+              Contact phone
+              <input name="contact_phone" placeholder="Optional" />
+            </label>
+            <label>
+              Email
+              <input name="email" placeholder="owner@example.com" type="email" required />
+            </label>
+            <label>
+              Password
+              <input name="password" minLength={8} placeholder="Password" type="password" required />
+            </label>
+            <button className="business-primary" disabled={busy === 'signup'}>
+              {busy === 'signup' ? 'Creating account' : 'Continue onboarding'}
+              <ArrowRight size={18} />
             </button>
           </form>
         </article>
@@ -147,24 +254,92 @@ export function BusinessPage() {
               <h2>Return to your onboarding</h2>
             </div>
           </div>
-          <form className="business-form-preview">
+          <form className="business-form-preview" onSubmit={login}>
             <label>
-              Email or phone
-              <input placeholder="owner@example.com" />
+              Email
+              <input name="email" placeholder="owner@example.com" type="email" required />
             </label>
             <label>
               Password
-              <input placeholder="Password" type="password" />
+              <input name="password" placeholder="Password" type="password" required />
             </label>
             <div className="business-login-note">
               <Clock3 size={18} />
               <span>Complete drafts, update details, and manage visibility.</span>
             </div>
-            <button className="business-secondary dark" type="button">
-              Login to dashboard
+            <button className="business-secondary dark" disabled={busy === 'login'}>
+              {busy === 'login' ? 'Logging in' : 'Login to dashboard'}
             </button>
           </form>
         </article>
+      </section>
+
+      <section className="business-section business-dashboard" id="business-dashboard">
+        <div className="business-dashboard-heading">
+          <div>
+            <p className="business-label">Business dashboard</p>
+            <h2>{business ? business.business_name : 'Login to complete onboarding'}</h2>
+          </div>
+          {business ? (
+            <button className="business-secondary dark" type="button" onClick={logout}>
+              <LogOut size={18} /> Logout
+            </button>
+          ) : null}
+        </div>
+        <ErrorBanner message={error} />
+        {success ? <div className="business-success">{success}</div> : null}
+        {business ? (
+          <form className="business-form-preview business-onboarding-form" onSubmit={saveOnboarding}>
+            <label>
+              Business name
+              <input name="business_name" defaultValue={business.business_name} required />
+            </label>
+            <label>
+              Category
+              <input name="business_category" defaultValue={business.business_category} required />
+            </label>
+            <label>
+              Location
+              <input name="location" defaultValue={business.location} required />
+            </label>
+            <label>
+              Contact phone
+              <input name="contact_phone" defaultValue={business.contact_phone ?? ''} />
+            </label>
+            <label>
+              Business description
+              <textarea
+                name="description"
+                defaultValue={business.description ?? ''}
+                placeholder="Tell users what makes this place worth visiting."
+              />
+            </label>
+            <label>
+              Menu, packages, events, or services
+              <textarea
+                name="offerings"
+                defaultValue={business.offerings ?? ''}
+                placeholder="Popular dishes, travel packages, event details, offers, or services."
+              />
+            </label>
+            <label>
+              Opening hours
+              <input
+                name="opening_hours"
+                defaultValue={business.opening_hours ?? ''}
+                placeholder="Example: Mon-Sun, 11 AM - 11 PM"
+              />
+            </label>
+            <button className="business-primary" disabled={busy === 'onboarding'}>
+              <Save size={18} />
+              {busy === 'onboarding' ? 'Saving onboarding' : 'Submit onboarding'}
+            </button>
+          </form>
+        ) : (
+          <div className="business-empty-dashboard">
+            Create an account or log in above to open the onboarding form.
+          </div>
+        )}
       </section>
     </main>
   )

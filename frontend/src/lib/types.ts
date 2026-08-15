@@ -24,6 +24,28 @@ export type AuthResponse = {
   user: User
 }
 
+export type BusinessAccount = {
+  id: number
+  email: string
+  business_name: string
+  business_category: string
+  location: string
+  contact_phone?: string
+  description?: string
+  offerings?: string
+  opening_hours?: string
+  onboarding_status: 'draft' | 'submitted' | 'approved'
+  account_status: 'active' | 'disabled'
+  created_at: string
+  updated_at: string
+}
+
+export type BusinessAuthResponse = {
+  access_token: string
+  access_token_expires_at: string
+  business: BusinessAccount
+}
+
 export type PostMediaInput = {
   media_type: 'image' | 'video'
   cloudinary_public_id: string

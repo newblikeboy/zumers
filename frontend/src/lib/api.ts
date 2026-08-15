@@ -1,5 +1,7 @@
 import type {
   AuthResponse,
+  BusinessAccount,
+  BusinessAuthResponse,
   CloudinarySignature,
   Conversation,
   Comment,
@@ -13,6 +15,7 @@ import type {
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1'
+const businessAccessTokenKey = 'zumers.businessAccessToken'
 
 type TokenStore = {
   accessToken: string | null
@@ -235,6 +238,69 @@ export const api = {
     apiRequest<{ status: string }>(`/notifications/${id}/read`, {
       method: 'POST',
     }),
+}
+
+async function businessApiRequest<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const headers = new Headers(options.headers)
+  if (!(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json')
+  }
+  const token = localStorage.getItem(businessAccessTokenKey)
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers,
+  })
+  const data = await response.json().catch(() => null)
+  if (!response.ok) {
+    throw new Error(data?.error ?? 'Request failed')
+  }
+
+  return data as T
+}
+
+function storeBusinessSession(response: BusinessAuthResponse) {
+  localStorage.setItem(businessAccessTokenKey, response.access_token)
+  return response
+}
+
+export const businessApi = {
+  signup: (body: {
+    email: string
+    password: string
+    business_name: string
+    business_category: string
+    location: string
+    contact_phone?: string
+  }) =>
+    businessApiRequest<BusinessAuthResponse>('/business/signup', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }).then(storeBusinessSession),
+
+  login: (body: { email: string; password: string }) =>
+    businessApiRequest<BusinessAuthResponse>('/business/login', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }).then(storeBusinessSession),
+
+  me: () => businessApiRequest<BusinessAccount>('/business/me'),
+
+  update: (body: Partial<BusinessAccount>) =>
+    businessApiRequest<BusinessAccount>('/business/me', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
+  logout: () => {
+    localStorage.removeItem(businessAccessTokenKey)
+  },
 }
 
 async function refreshSession(refreshToken: string) {

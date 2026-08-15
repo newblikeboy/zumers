@@ -51,6 +51,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/auth/logout", s.withAuth(s.handleLogout))
 	s.mux.HandleFunc("GET /api/v1/me", s.withAuth(s.handleMe))
 
+	s.mux.HandleFunc("POST /api/v1/business/signup", s.withRateLimit("business-auth", 10, 5, s.handleBusinessSignup))
+	s.mux.HandleFunc("POST /api/v1/business/login", s.withRateLimit("business-auth", 20, 5, s.handleBusinessLogin))
+	s.mux.HandleFunc("GET /api/v1/business/me", s.withBusinessAuth(s.handleBusinessMe))
+	s.mux.HandleFunc("PATCH /api/v1/business/me", s.withBusinessAuth(s.handleBusinessUpdate))
+
 	s.mux.HandleFunc("GET /api/v1/users/search", s.withAuth(s.handleUserSearch))
 	s.mux.HandleFunc("GET /api/v1/users/{id}", s.withAuth(s.handleProfileView))
 	s.mux.HandleFunc("PATCH /api/v1/me/profile", s.withAuth(s.handleProfileUpdate))

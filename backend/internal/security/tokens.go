@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	AccessTokenType  = "access"
-	RefreshTokenType = "refresh"
+	AccessTokenType         = "access"
+	RefreshTokenType        = "refresh"
+	BusinessAccessTokenType = "business_access"
 )
 
 type TokenManager struct {
@@ -74,12 +75,20 @@ func (m *TokenManager) RefreshTTL() time.Duration {
 }
 
 func (m *TokenManager) IssueAccessToken(userID int64) (string, time.Time, error) {
+	return m.issueAccessToken(userID, AccessTokenType)
+}
+
+func (m *TokenManager) IssueBusinessAccessToken(businessID int64) (string, time.Time, error) {
+	return m.issueAccessToken(businessID, BusinessAccessTokenType)
+}
+
+func (m *TokenManager) issueAccessToken(subjectID int64, tokenType string) (string, time.Time, error) {
 	now := time.Now().UTC()
 	expiresAt := now.Add(m.accessTTL)
 	claims := Claims{
-		TokenType: AccessTokenType,
+		TokenType: tokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   strconv.FormatInt(userID, 10),
+			Subject:   strconv.FormatInt(subjectID, 10),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(expiresAt),
 		},
@@ -90,6 +99,14 @@ func (m *TokenManager) IssueAccessToken(userID int64) (string, time.Time, error)
 }
 
 func (m *TokenManager) ParseAccessToken(tokenValue string) (int64, error) {
+	return m.parseAccessToken(tokenValue, AccessTokenType)
+}
+
+func (m *TokenManager) ParseBusinessAccessToken(tokenValue string) (int64, error) {
+	return m.parseAccessToken(tokenValue, BusinessAccessTokenType)
+}
+
+func (m *TokenManager) parseAccessToken(tokenValue string, tokenType string) (int64, error) {
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(tokenValue, claims, func(token *jwt.Token) (any, error) {
 		if token.Method != jwt.SigningMethodHS256 {
@@ -101,16 +118,16 @@ func (m *TokenManager) ParseAccessToken(tokenValue string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	if !token.Valid || claims.TokenType != AccessTokenType {
+	if !token.Valid || claims.TokenType != tokenType {
 		return 0, errors.New("invalid access token")
 	}
 
-	userID, err := strconv.ParseInt(claims.Subject, 10, 64)
-	if err != nil || userID <= 0 {
+	subjectID, err := strconv.ParseInt(claims.Subject, 10, 64)
+	if err != nil || subjectID <= 0 {
 		return 0, errors.New("invalid token subject")
 	}
 
-	return userID, nil
+	return subjectID, nil
 }
 
 func GenerateRefreshToken() (string, error) {

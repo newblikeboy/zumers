@@ -9,6 +9,7 @@ import (
 type contextKey string
 
 const userIDContextKey contextKey = "userID"
+const businessIDContextKey contextKey = "businessID"
 
 func (s *Server) withAuth(handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -42,4 +43,34 @@ func currentUserID(r *http.Request) int64 {
 func currentUserIDFromContext(ctx context.Context) int64 {
 	userID, _ := ctx.Value(userIDContextKey).(int64)
 	return userID
+}
+
+func (s *Server) withBusinessAuth(handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		header := r.Header.Get("Authorization")
+		if header == "" {
+			writeError(w, http.StatusUnauthorized, "authorization header is required")
+			return
+		}
+
+		tokenValue, ok := strings.CutPrefix(header, "Bearer ")
+		if !ok || strings.TrimSpace(tokenValue) == "" {
+			writeError(w, http.StatusUnauthorized, "bearer token is required")
+			return
+		}
+
+		businessID, err := s.tokens.ParseBusinessAccessToken(tokenValue)
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, "invalid access token")
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), businessIDContextKey, businessID)
+		handler(w, r.WithContext(ctx))
+	}
+}
+
+func currentBusinessID(r *http.Request) int64 {
+	businessID, _ := r.Context().Value(businessIDContextKey).(int64)
+	return businessID
 }

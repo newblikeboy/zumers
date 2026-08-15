@@ -779,14 +779,25 @@ a {
 }
 
 .business-form-preview input,
-.business-form-preview select {
+.business-form-preview select,
+.business-form-preview textarea {
   background: #f8fafc;
   border: 1px solid #cfd8e6;
   border-radius: 8px;
   color: #111827;
-  min-height: 48px;
   padding: 0 14px;
   width: 100%;
+}
+
+.business-form-preview input,
+.business-form-preview select {
+  min-height: 48px;
+}
+
+.business-form-preview textarea {
+  min-height: 118px;
+  padding: 13px 14px;
+  resize: vertical;
 }
 
 .business-input-icon {
@@ -818,6 +829,51 @@ a {
   padding: 14px;
 }
 
+.business-dashboard {
+  display: grid;
+  gap: 18px;
+}
+
+.business-dashboard-heading {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.business-dashboard-heading h2 {
+  margin-bottom: 0;
+}
+
+.business-success {
+  background: #ecfdf3;
+  border: 1px solid #b7ebc6;
+  border-radius: 8px;
+  color: #166534;
+  font-weight: 850;
+  padding: 14px 16px;
+}
+
+.business-onboarding-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.business-onboarding-form label:nth-of-type(5),
+.business-onboarding-form label:nth-of-type(6),
+.business-onboarding-form label:nth-of-type(7),
+.business-onboarding-form button {
+  grid-column: 1 / -1;
+}
+
+.business-empty-dashboard {
+  background: #f8fafc;
+  border: 1px dashed #cfd8e6;
+  border-radius: 8px;
+  color: #667085;
+  font-weight: 750;
+  padding: 22px;
+}
+
 @media (max-width: 860px) {
   .landing-nav {
     align-items: flex-start;
@@ -847,7 +903,8 @@ a {
   }
 
   .business-onboarding,
-  .business-access-grid {
+  .business-access-grid,
+  .business-onboarding-form {
     grid-template-columns: 1fr;
   }
 }
