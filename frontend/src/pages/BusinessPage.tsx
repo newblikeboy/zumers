@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { ErrorBanner } from '../components/ErrorBanner'
 import businessHero from '../assets/zumers-business-hero.png'
 import { businessApi } from '../lib/api'
@@ -35,14 +35,25 @@ const onboardingSteps = [
   'Verification, visibility settings, and offers',
 ]
 
-export function BusinessPage() {
+type BusinessPageMode = 'landing' | 'signup' | 'login' | 'dashboard'
+
+type BusinessPageProps = {
+  mode: BusinessPageMode
+}
+
+export function BusinessPage({ mode }: BusinessPageProps) {
   const [business, setBusiness] = useState<BusinessAccount | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [checkedSession, setCheckedSession] = useState(false)
+  const navigate = useNavigate()
 
   useEffect(() => {
-    businessApi.me().then(setBusiness).catch(() => undefined)
+    businessApi.me()
+      .then(setBusiness)
+      .catch(() => undefined)
+      .finally(() => setCheckedSession(true))
   }, [])
 
   async function signup(event: FormEvent<HTMLFormElement>) {
@@ -62,7 +73,7 @@ export function BusinessPage() {
       })
       setBusiness(response.business)
       setSuccess('Business account created. Complete onboarding details below.')
-      window.location.hash = 'business-dashboard'
+      navigate('/business/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Business signup failed')
     } finally {
@@ -83,7 +94,7 @@ export function BusinessPage() {
       })
       setBusiness(response.business)
       setSuccess('Logged in. Continue your business onboarding.')
-      window.location.hash = 'business-dashboard'
+      navigate('/business/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Business login failed')
     } finally {
@@ -121,7 +132,17 @@ export function BusinessPage() {
     businessApi.logout()
     setBusiness(null)
     setSuccess('Business session ended.')
+    navigate('/business/login')
   }
+
+  if (mode === 'dashboard' && checkedSession && !business) {
+    return <Navigate to="/business/login" replace />
+  }
+
+  const showLandingContent = mode === 'landing'
+  const showSignup = mode === 'signup'
+  const showLogin = mode === 'login'
+  const showDashboard = mode === 'dashboard'
 
   return (
     <main className="business-page">
@@ -136,9 +157,10 @@ export function BusinessPage() {
             <strong>Zumers Business</strong>
           </Link>
           <nav>
-            <a href="#business-onboarding">Onboarding</a>
-            <a href="#business-signup">Signup</a>
-            <a href="#business-login">Login</a>
+            <Link to="/business">Overview</Link>
+            <Link to="/business/signup">Signup</Link>
+            <Link to="/business/login">Login</Link>
+            {business ? <Link to="/business/dashboard">Dashboard</Link> : null}
           </nav>
         </header>
 
@@ -153,49 +175,55 @@ export function BusinessPage() {
             get discovered by users looking for what to do today.
           </p>
           <div className="business-actions">
-            <a className="business-primary" href="#business-signup">
+            <Link className="business-primary" to="/business/signup">
               Register business <ArrowRight size={18} />
-            </a>
-            <a className="business-secondary" href="#business-login">
+            </Link>
+            <Link className="business-secondary" to="/business/login">
               Business login
-            </a>
+            </Link>
           </div>
         </div>
       </section>
 
-      <section className="business-category-strip" aria-label="Business categories">
-        {businessTypes.map((item) => (
-          <article key={item.title}>
-            <item.icon size={22} />
-            <div>
-              <strong>{item.title}</strong>
-              <span>{item.text}</span>
-            </div>
-          </article>
-        ))}
-      </section>
+      {showLandingContent ? (
+        <>
+          <section className="business-category-strip" aria-label="Business categories">
+            {businessTypes.map((item) => (
+              <article key={item.title}>
+                <item.icon size={22} />
+                <div>
+                  <strong>{item.title}</strong>
+                  <span>{item.text}</span>
+                </div>
+              </article>
+            ))}
+          </section>
 
-      <section className="business-section business-onboarding" id="business-onboarding">
-        <div className="business-section-copy">
-          <p className="business-label">Onboarding platform</p>
-          <h2>Register once, complete the details that help people choose you.</h2>
-          <p>
-            After signup, businesses can log in and complete a structured
-            onboarding form. These details can power Zumers recommendations,
-            nearby discovery, reels, posts, and visit decisions for users.
-          </p>
-        </div>
-        <div className="business-checklist">
-          {onboardingSteps.map((step) => (
-            <div key={step}>
-              <CheckCircle2 size={22} />
-              <span>{step}</span>
+          <section className="business-section business-onboarding" id="business-onboarding">
+            <div className="business-section-copy">
+              <p className="business-label">Onboarding platform</p>
+              <h2>Register once, complete the details that help people choose you.</h2>
+              <p>
+                After signup, businesses can log in and complete a structured
+                onboarding form. These details can power Zumers recommendations,
+                nearby discovery, reels, posts, and visit decisions for users.
+              </p>
             </div>
-          ))}
-        </div>
-      </section>
+            <div className="business-checklist">
+              {onboardingSteps.map((step) => (
+                <div key={step}>
+                  <CheckCircle2 size={22} />
+                  <span>{step}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
+      ) : null}
 
-      <section className="business-section business-access-grid">
+      {showSignup || showLogin ? (
+      <section className="business-section business-access-grid business-access-single">
+        {showSignup ? (
         <article className="business-form-card" id="business-signup">
           <div className="business-form-heading">
             <Building2 size={26} />
@@ -245,7 +273,9 @@ export function BusinessPage() {
             </button>
           </form>
         </article>
+        ) : null}
 
+        {showLogin ? (
         <article className="business-form-card business-login-card" id="business-login">
           <div className="business-form-heading">
             <BadgeCheck size={26} />
@@ -272,8 +302,11 @@ export function BusinessPage() {
             </button>
           </form>
         </article>
+        ) : null}
       </section>
+      ) : null}
 
+      {showDashboard ? (
       <section className="business-section business-dashboard" id="business-dashboard">
         <div className="business-dashboard-heading">
           <div>
@@ -341,6 +374,7 @@ export function BusinessPage() {
           </div>
         )}
       </section>
+      ) : null}
     </main>
   )
 }

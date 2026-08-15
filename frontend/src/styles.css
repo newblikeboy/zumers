@@ -692,6 +692,11 @@ a {
   grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
 }
 
+.business-access-single {
+  grid-template-columns: minmax(0, 560px);
+  justify-content: center;
+}
+
 .business-label {
   color: #0ea5e9;
   font-weight: 950;

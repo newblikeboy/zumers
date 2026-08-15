@@ -30,7 +30,10 @@ function App() {
           user ? <Navigate to="/" replace /> : <AuthPage mode="signup" />
         }
       />
-      <Route path="/business" element={<BusinessPage />} />
+      <Route path="/business" element={<BusinessPage mode="landing" />} />
+      <Route path="/business/signup" element={<BusinessPage mode="signup" />} />
+      <Route path="/business/login" element={<BusinessPage mode="login" />} />
+      <Route path="/business/dashboard" element={<BusinessPage mode="dashboard" />} />
       <Route
         path="/"
         element={user ? <AppLayout /> : <LandingPage />}
