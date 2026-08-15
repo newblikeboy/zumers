@@ -1,0 +1,18 @@
+[Unit]
+Description=Zumers Go API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=zumers
+Group=zumers
+WorkingDirectory=/opt/zumers/backend
+EnvironmentFile=/etc/zumers/backend.env
+ExecStart=/opt/zumers/backend/bin/zumers-api
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
