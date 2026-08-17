@@ -29,7 +29,20 @@ export type BusinessAccount = {
   email: string
   business_name: string
   business_category: string
+  business_subcategory?: string
   location: string
+  address?: string
+  city?: string
+  area?: string
+  latitude?: number
+  longitude?: number
+  service_radius_km?: number
+  price_range?: 'budget' | 'moderate' | 'premium' | 'luxury'
+  mood_tags?: string
+  service_tags?: string
+  best_for?: string
+  website_url?: string
+  whatsapp_number?: string
   contact_phone?: string
   description?: string
   offerings?: string

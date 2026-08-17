@@ -971,9 +971,34 @@ a {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.business-onboarding-form label:nth-of-type(5),
-.business-onboarding-form label:nth-of-type(6),
-.business-onboarding-form label:nth-of-type(7),
+.business-form-section-title {
+  border-top: 1px solid #e4eaf2;
+  display: grid;
+  gap: 4px;
+  grid-column: 1 / -1;
+  padding-top: 16px;
+}
+
+.business-form-section-title:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.business-form-section-title h3 {
+  color: #111827;
+  font-size: 1.02rem;
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.business-form-section-title p {
+  color: #667085;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.business-onboarding-form label:has(textarea),
 .business-onboarding-form button {
   grid-column: 1 / -1;
 }
@@ -1003,10 +1028,10 @@ a {
   border: 1px solid #dbe3ef;
   border-radius: 8px;
   box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
-  max-height: min(92vh, 760px);
-  max-width: 540px;
+  max-height: min(92vh, 820px);
+  max-width: 920px;
   overflow: auto;
-  padding: 24px;
+  padding: 0;
   position: relative;
   width: 100%;
 }
@@ -1025,6 +1050,99 @@ a {
   right: 16px;
   top: 16px;
   width: 42px;
+  z-index: 2;
+}
+
+.business-auth-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(340px, 1.1fr);
+  min-height: 560px;
+}
+
+.business-auth-aside {
+  align-content: space-between;
+  background: #0f172a;
+  color: #fff;
+  display: grid;
+  gap: 28px;
+  padding: 34px;
+}
+
+.business-auth-mark {
+  align-items: center;
+  background: #0ea5e9;
+  border-radius: 50%;
+  box-shadow: 0 16px 34px rgba(14, 165, 233, 0.32);
+  display: inline-flex;
+  font-size: 1.2rem;
+  font-weight: 950;
+  height: 46px;
+  justify-content: center;
+  width: 46px;
+}
+
+.business-auth-aside h2 {
+  color: #fff;
+  font-size: clamp(2rem, 3.8vw, 3.4rem);
+  letter-spacing: 0;
+  line-height: 1;
+  margin: 0;
+}
+
+.business-auth-aside p:not(.business-label) {
+  color: rgba(255, 255, 255, 0.76);
+  line-height: 1.65;
+  margin: 18px 0 0;
+}
+
+.business-auth-aside .business-label {
+  color: #7dd3fc;
+}
+
+.business-auth-points {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.business-auth-points span {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.88);
+  font-weight: 850;
+  padding: 10px;
+}
+
+.business-auth-panel {
+  display: grid;
+  gap: 18px;
+  padding: 28px;
+}
+
+.business-auth-form .business-form-heading {
+  margin-bottom: 4px;
+}
+
+.business-auth-form .business-form-heading h2 {
+  font-size: 1.45rem;
+  line-height: 1.15;
+}
+
+.business-signup-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.business-signup-form .business-form-heading,
+.business-signup-form label:nth-of-type(1),
+.business-signup-form label:nth-of-type(2),
+.business-signup-form .business-primary {
+  grid-column: 1 / -1;
+}
+
+.business-login-form {
+  align-content: start;
+  max-width: 420px;
 }
 
 .business-auth-tabs {
@@ -1033,7 +1151,7 @@ a {
   display: grid;
   gap: 6px;
   grid-template-columns: 1fr 1fr;
-  margin: 0 54px 22px 0;
+  margin: 0 54px 4px 0;
   padding: 5px;
 }
 
@@ -1059,6 +1177,10 @@ a {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   min-height: 100vh;
+}
+
+.business-dashboard-backdrop {
+  display: none;
 }
 
 .business-dashboard-sidebar {
@@ -1096,8 +1218,8 @@ a {
   gap: 8px;
 }
 
-.business-dashboard-sidebar a,
-.business-dashboard-sidebar button {
+.business-dashboard-sidebar nav button,
+.business-dashboard-logout {
   align-items: center;
   background: transparent;
   border: 0;
@@ -1110,15 +1232,23 @@ a {
   gap: 10px;
   min-height: 46px;
   padding: 0 14px;
+  text-align: left;
+  width: 100%;
 }
 
-.business-dashboard-sidebar a:hover,
-.business-dashboard-sidebar button:hover {
+.business-dashboard-sidebar nav button:hover,
+.business-dashboard-sidebar nav button.active,
+.business-dashboard-logout:hover {
   background: rgba(255, 255, 255, 0.1);
   color: #fff;
 }
 
-.business-dashboard-sidebar button {
+.business-dashboard-sidebar nav button.active {
+  background: #0ea5e9;
+  box-shadow: 0 12px 28px rgba(14, 165, 233, 0.26);
+}
+
+.business-dashboard-logout {
   margin-top: auto;
 }
 
@@ -1139,11 +1269,32 @@ a {
   padding: 24px;
 }
 
+.business-dashboard-top-title {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  min-width: 0;
+}
+
+.business-dashboard-menu-button {
+  align-items: center;
+  background: #eef2f6;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  color: #111827;
+  cursor: pointer;
+  display: none;
+  flex: 0 0 auto;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
 .business-dashboard-top h1 {
   color: #111827;
-  font-size: clamp(2rem, 4vw, 3.8rem);
+  font-size: 2.15rem;
   letter-spacing: 0;
-  line-height: 1;
+  line-height: 1.08;
   margin: 0 0 8px;
 }
 
@@ -1196,6 +1347,10 @@ a {
   display: grid;
   gap: 18px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.business-control-grid-single {
+  grid-template-columns: minmax(0, 760px);
 }
 
 .business-control-panel {
@@ -1338,18 +1493,48 @@ a {
     grid-template-columns: 1fr;
   }
 
+  .business-dashboard-backdrop {
+    background: rgba(15, 23, 42, 0.44);
+    border: 0;
+    display: block;
+    inset: 0;
+    position: fixed;
+    z-index: 40;
+  }
+
   .business-dashboard-sidebar {
-    min-height: 0;
-    position: static;
+    bottom: 0;
+    box-shadow: 20px 0 40px rgba(15, 23, 42, 0.28);
+    left: 0;
+    min-height: 100dvh;
+    position: fixed;
+    top: 0;
+    transform: translateX(-105%);
+    transition: transform 180ms ease;
+    width: min(320px, 86vw);
+    z-index: 41;
+  }
+
+  .business-dashboard-shell.menu-open .business-dashboard-sidebar {
+    transform: translateX(0);
   }
 
   .business-dashboard-sidebar nav {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
-  .business-dashboard-sidebar a,
-  .business-dashboard-sidebar button {
-    justify-content: center;
+  .business-dashboard-menu-button {
+    display: inline-flex;
+  }
+
+  .business-auth-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .business-auth-aside {
+    align-content: start;
+    min-height: auto;
+    padding: 28px;
   }
 
   .business-stat-grid,
@@ -1474,11 +1659,32 @@ a {
   }
 
   .business-auth-modal {
-    padding: 20px;
+    max-height: calc(100dvh - 24px);
   }
 
   .business-auth-tabs {
     margin-right: 48px;
+  }
+
+  .business-auth-aside {
+    gap: 18px;
+    padding: 22px;
+  }
+
+  .business-auth-aside h2 {
+    font-size: 2rem;
+  }
+
+  .business-auth-points {
+    grid-template-columns: 1fr;
+  }
+
+  .business-auth-panel {
+    padding: 20px;
+  }
+
+  .business-signup-form {
+    grid-template-columns: 1fr;
   }
 
   .business-dashboard-main {
@@ -1490,10 +1696,17 @@ a {
     display: grid;
   }
 
-  .business-dashboard-sidebar nav,
   .business-stat-grid,
   .business-control-grid {
     grid-template-columns: 1fr;
+  }
+
+  .business-dashboard-top-title {
+    align-items: flex-start;
+  }
+
+  .business-dashboard-top h1 {
+    font-size: 1.65rem;
   }
 }
 

@@ -11,6 +11,7 @@ import {
   ForkKnife,
   LogOut,
   MapPin,
+  Menu,
   Megaphone,
   Percent,
   Save,
@@ -72,6 +73,15 @@ const onboardingBusinesses = [
 
 type BusinessAuthMode = 'signup' | 'login'
 type BusinessPageMode = 'landing' | 'dashboard'
+type BusinessDashboardSection = 'overview' | 'today' | 'offers' | 'bookings' | 'profile'
+
+const businessDashboardSections = [
+  { id: 'overview', label: 'Overview', icon: BarChart3 },
+  { id: 'today', label: 'Today update', icon: Megaphone },
+  { id: 'offers', label: 'Offers', icon: Percent },
+  { id: 'bookings', label: 'Bookings', icon: Ticket },
+  { id: 'profile', label: 'Business profile', icon: Building2 },
+] satisfies Array<{ id: BusinessDashboardSection; label: string; icon: typeof BarChart3 }>
 
 type BusinessPageProps = {
   mode: BusinessPageMode
@@ -86,6 +96,8 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
   const [success, setSuccess] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [checkedSession, setCheckedSession] = useState(false)
+  const [dashboardSection, setDashboardSection] = useState<BusinessDashboardSection>('overview')
+  const [dashboardMenuOpen, setDashboardMenuOpen] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -165,7 +177,20 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
       const updated = await businessApi.update({
         business_name: String(form.get('business_name')),
         business_category: String(form.get('business_category')),
+        business_subcategory: String(form.get('business_subcategory')),
         location: String(form.get('location')),
+        address: String(form.get('address')),
+        city: String(form.get('city')),
+        area: String(form.get('area')),
+        latitude: optionalNumber(form.get('latitude')),
+        longitude: optionalNumber(form.get('longitude')),
+        service_radius_km: optionalNumber(form.get('service_radius_km')),
+        price_range: optionalPriceRange(form.get('price_range')),
+        mood_tags: String(form.get('mood_tags')),
+        service_tags: String(form.get('service_tags')),
+        best_for: String(form.get('best_for')),
+        website_url: String(form.get('website_url')),
+        whatsapp_number: String(form.get('whatsapp_number')),
         contact_phone: String(form.get('contact_phone')),
         description: String(form.get('description')),
         offerings: String(form.get('offerings')),
@@ -243,6 +268,11 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
     }
   }
 
+  function selectDashboardSection(section: BusinessDashboardSection) {
+    setDashboardSection(section)
+    setDashboardMenuOpen(false)
+  }
+
   if (mode === 'dashboard' && !checkedSession) {
     return <div className="boot-screen">Loading business dashboard</div>
   }
@@ -252,6 +282,8 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
   }
 
   if (mode === 'dashboard' && business) {
+    const activeDashboardSection =
+      businessDashboardSections.find((section) => section.id === dashboardSection) ?? businessDashboardSections[0]
     const dashboardStats = [
       { icon: BarChart3, label: 'Offer clicks', value: dashboard?.offer_clicks ?? 0, hint: 'Today' },
       { icon: Users, label: 'Profile visits', value: dashboard?.profile_visits ?? 0, hint: 'Last 24 hours' },
@@ -260,29 +292,57 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
     ]
 
     return (
-      <main className="business-dashboard-shell">
+      <main className={dashboardMenuOpen ? 'business-dashboard-shell menu-open' : 'business-dashboard-shell'}>
+        {dashboardMenuOpen ? (
+          <button
+            aria-label="Close business menu"
+            className="business-dashboard-backdrop"
+            type="button"
+            onClick={() => setDashboardMenuOpen(false)}
+          />
+        ) : null}
         <aside className="business-dashboard-sidebar">
           <Link className="business-dashboard-brand" to={businessPath()}>
             <span>Z</span>
             <strong>Zumers Business</strong>
           </Link>
-          <nav>
-            <a href="#today">Today</a>
-            <a href="#offers">Offers</a>
-            <a href="#bookings">Bookings</a>
-            <a href="#onboarding">Onboarding</a>
+          <nav aria-label="Business dashboard sections">
+            {businessDashboardSections.map((item) => {
+              const SectionIcon = item.icon
+              return (
+                <button
+                  key={item.id}
+                  className={dashboardSection === item.id ? 'active' : ''}
+                  type="button"
+                  onClick={() => selectDashboardSection(item.id)}
+                >
+                  <SectionIcon size={18} />
+                  <span>{item.label}</span>
+                </button>
+              )
+            })}
           </nav>
-          <button type="button" onClick={logout}>
+          <button className="business-dashboard-logout" type="button" onClick={logout}>
             <LogOut size={18} /> Logout
           </button>
         </aside>
 
         <section className="business-dashboard-main">
           <header className="business-dashboard-top">
-            <div>
-              <p className="business-label">Business dashboard</p>
-              <h1>{business.business_name}</h1>
-              <span>{business.business_category} - {business.location}</span>
+            <div className="business-dashboard-top-title">
+              <button
+                aria-label="Open business menu"
+                className="business-dashboard-menu-button"
+                type="button"
+                onClick={() => setDashboardMenuOpen((open) => !open)}
+              >
+                <Menu size={22} />
+              </button>
+              <div>
+                <p className="business-label">{activeDashboardSection.label}</p>
+                <h1>{business.business_name}</h1>
+                <span>{business.business_category} - {business.location}</span>
+              </div>
             </div>
             <Link className="business-secondary dark" to={businessPath()}>
               View landing
@@ -292,153 +352,172 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
           <ErrorBanner message={error} />
           {success ? <div className="business-success">{success}</div> : null}
 
-          <section className="business-stat-grid" aria-label="Business performance">
-            {dashboardStats.map((stat) => (
-              <article key={stat.label}>
-                <stat.icon size={22} />
-                <strong>{stat.value}</strong>
-                <span>{stat.label}</span>
-                <small>{stat.hint}</small>
-              </article>
-            ))}
-          </section>
+          {dashboardSection === 'overview' ? (
+            <>
+              <section className="business-stat-grid" aria-label="Business performance">
+                {dashboardStats.map((stat) => (
+                  <article key={stat.label}>
+                    <stat.icon size={22} />
+                    <strong>{stat.value}</strong>
+                    <span>{stat.label}</span>
+                    <small>{stat.hint}</small>
+                  </article>
+                ))}
+              </section>
 
-          <section className="business-control-grid">
-            <article className="business-control-panel" id="today">
-              <div className="business-panel-heading">
-                <Megaphone size={24} />
-                <div>
-                  <p className="business-label">What is new today</p>
-                  <h2>Post a fresh business update</h2>
-                </div>
-              </div>
-              <form className="business-form-preview" onSubmit={saveTodayUpdate}>
-                <label>
-                  Today message
-                <textarea
-                  name="today_update"
-                  defaultValue={dashboard?.today_update ?? ''}
-                  placeholder="Example: Live music tonight from 8 PM, new tandoori platter, or seats available for dinner."
-                />
-              </label>
-              <label>
-                Highlight
-                <input
-                  name="today_highlight"
-                  defaultValue={dashboard?.today_highlight ?? ''}
-                  placeholder="Example: Dinner special, new menu, weekend trip"
-                />
-              </label>
-              <button className="business-primary" disabled={busy === 'today'}>
-                <Save size={18} />
-                {busy === 'today' ? 'Saving update' : 'Save today update'}
-              </button>
-              </form>
-            </article>
-
-            <article className="business-control-panel" id="offers">
-              <div className="business-panel-heading">
-                <Percent size={24} />
-                <div>
-                  <p className="business-label">Live offer</p>
-                  <h2>Publish discount or deal</h2>
-                </div>
-              </div>
-              <form className="business-form-preview" onSubmit={saveOffer}>
-                <label>
-                Offer title
-                <input
-                  name="offer_title"
-                  defaultValue={dashboard?.offer_title ?? ''}
-                  placeholder="Example: 20% off lunch buffet"
-                />
-              </label>
-              <label>
-                Offer details
-                <textarea
-                  name="offer_details"
-                  defaultValue={dashboard?.offer_details ?? ''}
-                  placeholder="Tell users what is included and how to claim it."
-                />
-              </label>
-              <label>
-                Valid until
-                <input
-                  name="valid_until"
-                  defaultValue={dashboard?.offer_valid_until ?? ''}
-                  type="date"
-                />
-              </label>
-              <button className="business-primary" disabled={busy === 'offer'}>
-                <Save size={18} />
-                {busy === 'offer' ? 'Saving offer' : 'Save live offer'}
-              </button>
-              </form>
-            </article>
-          </section>
-
-          <section className="business-control-grid">
-            <article className="business-control-panel" id="bookings">
-              <div className="business-panel-heading">
-                <Ticket size={24} />
-                <div>
-                  <p className="business-label">Bookings</p>
-                  <h2>User booking requests</h2>
-                </div>
-              </div>
-              {dashboard?.bookings.length ? (
-                <div className="business-booking-list">
-                  {dashboard.bookings.map((booking) => (
-                    <div key={booking.id}>
-                      <strong>{booking.requester_name}</strong>
-                      <span>{booking.booking_note ?? 'Booking request'}</span>
-                      <small>{booking.status}</small>
+              <section className="business-control-grid business-control-grid-single">
+                <article className="business-control-panel">
+                  <div className="business-panel-heading">
+                    <BarChart3 size={24} />
+                    <div>
+                      <p className="business-label">Tracking</p>
+                      <h2>Offer performance</h2>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="business-booking-empty">
-                  <ClipboardList size={30} />
-                  <strong>No booking requests yet</strong>
-                  <span>When users book tables, trips, tickets, or events, requests will appear here.</span>
-                </div>
-              )}
-            </article>
+                  </div>
+                  <div className="business-tracking-list">
+                    <div>
+                      <span>Live offer clicks</span>
+                      <strong>{dashboard?.offer_clicks ?? 0}</strong>
+                    </div>
+                    <div>
+                      <span>Booking intent clicks</span>
+                      <strong>{dashboard?.booking_clicks ?? 0}</strong>
+                    </div>
+                    <div>
+                      <span>Direction clicks</span>
+                      <strong>{dashboard?.direction_clicks ?? 0}</strong>
+                    </div>
+                  </div>
+                </article>
+              </section>
+            </>
+          ) : null}
 
-            <article className="business-control-panel">
+          {dashboardSection === 'today' ? (
+            <section className="business-control-grid business-control-grid-single">
+              <article className="business-control-panel">
+                <div className="business-panel-heading">
+                  <Megaphone size={24} />
+                  <div>
+                    <p className="business-label">What is new today</p>
+                    <h2>Post a fresh business update</h2>
+                  </div>
+                </div>
+                <form className="business-form-preview" onSubmit={saveTodayUpdate}>
+                  <label>
+                    Today message
+                    <textarea
+                      name="today_update"
+                      defaultValue={dashboard?.today_update ?? ''}
+                      placeholder="Example: Live music tonight from 8 PM, new tandoori platter, or seats available for dinner."
+                    />
+                  </label>
+                  <label>
+                    Highlight
+                    <input
+                      name="today_highlight"
+                      defaultValue={dashboard?.today_highlight ?? ''}
+                      placeholder="Example: Dinner special, new menu, weekend trip"
+                    />
+                  </label>
+                  <button className="business-primary" disabled={busy === 'today'}>
+                    <Save size={18} />
+                    {busy === 'today' ? 'Saving update' : 'Save today update'}
+                  </button>
+                </form>
+              </article>
+            </section>
+          ) : null}
+
+          {dashboardSection === 'offers' ? (
+            <section className="business-control-grid business-control-grid-single">
+              <article className="business-control-panel">
+                <div className="business-panel-heading">
+                  <Percent size={24} />
+                  <div>
+                    <p className="business-label">Live offer</p>
+                    <h2>Publish discount or deal</h2>
+                  </div>
+                </div>
+                <form className="business-form-preview" onSubmit={saveOffer}>
+                  <label>
+                    Offer title
+                    <input
+                      name="offer_title"
+                      defaultValue={dashboard?.offer_title ?? ''}
+                      placeholder="Example: 20% off lunch buffet"
+                    />
+                  </label>
+                  <label>
+                    Offer details
+                    <textarea
+                      name="offer_details"
+                      defaultValue={dashboard?.offer_details ?? ''}
+                      placeholder="Tell users what is included and how to claim it."
+                    />
+                  </label>
+                  <label>
+                    Valid until
+                    <input
+                      name="valid_until"
+                      defaultValue={dashboard?.offer_valid_until ?? ''}
+                      type="date"
+                    />
+                  </label>
+                  <button className="business-primary" disabled={busy === 'offer'}>
+                    <Save size={18} />
+                    {busy === 'offer' ? 'Saving offer' : 'Save live offer'}
+                  </button>
+                </form>
+              </article>
+            </section>
+          ) : null}
+
+          {dashboardSection === 'bookings' ? (
+            <section className="business-control-grid business-control-grid-single">
+              <article className="business-control-panel">
+                <div className="business-panel-heading">
+                  <Ticket size={24} />
+                  <div>
+                    <p className="business-label">Bookings</p>
+                    <h2>User booking requests</h2>
+                  </div>
+                </div>
+                {dashboard?.bookings.length ? (
+                  <div className="business-booking-list">
+                    {dashboard.bookings.map((booking) => (
+                      <div key={booking.id}>
+                        <strong>{booking.requester_name}</strong>
+                        <span>{booking.booking_note ?? 'Booking request'}</span>
+                        <small>{booking.status}</small>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="business-booking-empty">
+                    <ClipboardList size={30} />
+                    <strong>No booking requests yet</strong>
+                    <span>When users book tables, trips, tickets, or events, requests will appear here.</span>
+                  </div>
+                )}
+              </article>
+            </section>
+          ) : null}
+
+          {dashboardSection === 'profile' ? (
+            <section className="business-control-panel">
               <div className="business-panel-heading">
-                <BarChart3 size={24} />
+                <Building2 size={24} />
                 <div>
-                  <p className="business-label">Tracking</p>
-                  <h2>Offer performance</h2>
+                  <p className="business-label">Onboarding</p>
+                  <h2>Business details</h2>
                 </div>
               </div>
-              <div className="business-tracking-list">
-                <div>
-                  <span>Live offer clicks</span>
-                  <strong>{dashboard?.offer_clicks ?? 0}</strong>
-                </div>
-                <div>
-                  <span>Booking intent clicks</span>
-                  <strong>{dashboard?.booking_clicks ?? 0}</strong>
-                </div>
-                <div>
-                  <span>Direction clicks</span>
-                  <strong>{dashboard?.direction_clicks ?? 0}</strong>
-                </div>
+              <form className="business-form-preview business-onboarding-form" onSubmit={saveOnboarding}>
+              <div className="business-form-section-title">
+                <h3>Business identity</h3>
+                <p>Core details users and the discovery engine use to understand the business.</p>
               </div>
-            </article>
-          </section>
-
-          <section className="business-control-panel" id="onboarding">
-            <div className="business-panel-heading">
-              <Building2 size={24} />
-              <div>
-                <p className="business-label">Onboarding</p>
-                <h2>Business details</h2>
-              </div>
-            </div>
-            <form className="business-form-preview business-onboarding-form" onSubmit={saveOnboarding}>
               <label>
                 Business name
                 <input name="business_name" defaultValue={business.business_name} required />
@@ -448,13 +527,110 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
                 <input name="business_category" defaultValue={business.business_category} required />
               </label>
               <label>
-                Location
+                Subcategory
+                <input
+                  name="business_subcategory"
+                  defaultValue={business.business_subcategory ?? ''}
+                  placeholder="Example: North Indian, momo stall, weekend tours"
+                />
+              </label>
+              <label>
+                Location summary
                 <input name="location" defaultValue={business.location} required />
+              </label>
+              <div className="business-form-section-title">
+                <h3>Location intelligence</h3>
+                <p>Structured place data for nearby search, maps, and future directions tracking.</p>
+              </div>
+              <label>
+                Address
+                <textarea
+                  name="address"
+                  defaultValue={business.address ?? ''}
+                  placeholder="Full address users can follow before opening maps."
+                />
+              </label>
+              <label>
+                City
+                <input name="city" defaultValue={business.city ?? ''} placeholder="Example: New Delhi" />
+              </label>
+              <label>
+                Area
+                <input name="area" defaultValue={business.area ?? ''} placeholder="Example: Rajouri Garden" />
+              </label>
+              <label>
+                Latitude
+                <input
+                  name="latitude"
+                  defaultValue={business.latitude ?? ''}
+                  inputMode="decimal"
+                  placeholder="Example: 28.6467"
+                  step="any"
+                  type="number"
+                />
+              </label>
+              <label>
+                Longitude
+                <input
+                  name="longitude"
+                  defaultValue={business.longitude ?? ''}
+                  inputMode="decimal"
+                  placeholder="Example: 77.1200"
+                  step="any"
+                  type="number"
+                />
+              </label>
+              <label>
+                Service radius
+                <input
+                  name="service_radius_km"
+                  defaultValue={business.service_radius_km ?? ''}
+                  inputMode="decimal"
+                  min="0"
+                  placeholder="Kilometers"
+                  step="0.1"
+                  type="number"
+                />
+              </label>
+              <div className="business-form-section-title">
+                <h3>Pricing and contact</h3>
+                <p>How users can evaluate cost and reach the business from a search result.</p>
+              </div>
+              <label>
+                Price range
+                <select name="price_range" defaultValue={business.price_range ?? ''}>
+                  <option value="">Select price range</option>
+                  <option value="budget">Budget</option>
+                  <option value="moderate">Moderate</option>
+                  <option value="premium">Premium</option>
+                  <option value="luxury">Luxury</option>
+                </select>
               </label>
               <label>
                 Contact phone
                 <input name="contact_phone" defaultValue={business.contact_phone ?? ''} />
               </label>
+              <label>
+                WhatsApp number
+                <input
+                  name="whatsapp_number"
+                  defaultValue={business.whatsapp_number ?? ''}
+                  placeholder="Number for customer enquiries"
+                />
+              </label>
+              <label>
+                Website or menu link
+                <input
+                  name="website_url"
+                  defaultValue={business.website_url ?? ''}
+                  placeholder="https://..."
+                  type="url"
+                />
+              </label>
+              <div className="business-form-section-title">
+                <h3>Discovery content</h3>
+                <p>Offers, mood tags, and best-for signals that connect the business to user intent.</p>
+              </div>
               <label>
                 Business description
                 <textarea
@@ -472,6 +648,30 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
                 />
               </label>
               <label>
+                Mood tags
+                <textarea
+                  name="mood_tags"
+                  defaultValue={business.mood_tags ?? ''}
+                  placeholder="hungry, date plan, friends hangout, family dinner, late night"
+                />
+              </label>
+              <label>
+                Service tags
+                <textarea
+                  name="service_tags"
+                  defaultValue={business.service_tags ?? ''}
+                  placeholder="north indian, momos, buffet, live music, weekend trip"
+                />
+              </label>
+              <label>
+                Best for
+                <textarea
+                  name="best_for"
+                  defaultValue={business.best_for ?? ''}
+                  placeholder="friends, family, couples, office groups, solo visitors"
+                />
+              </label>
+              <label>
                 Opening hours
                 <input
                   name="opening_hours"
@@ -483,8 +683,9 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
                 <Save size={18} />
                 {busy === 'onboarding' ? 'Saving onboarding' : 'Submit onboarding'}
               </button>
-            </form>
-          </section>
+              </form>
+            </section>
+          ) : null}
         </section>
       </main>
     )
@@ -613,28 +814,54 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
             <button className="business-auth-close" type="button" onClick={closeAuth} aria-label="Close">
               <X size={22} />
             </button>
-            <div className="business-auth-tabs">
-              <button
-                className={authMode === 'signup' ? 'active' : ''}
-                type="button"
-                onClick={() => openAuth('signup')}
-              >
-                Signup
-              </button>
-              <button
-                className={authMode === 'login' ? 'active' : ''}
-                type="button"
-                onClick={() => openAuth('login')}
-              >
-                Login
-              </button>
+            <div className="business-auth-layout">
+              <aside className="business-auth-aside">
+                <span className="business-auth-mark">Z</span>
+                <div>
+                  <p className="business-label">Zumers Business</p>
+                  <h2>
+                    {authMode === 'signup'
+                      ? 'Set up your discovery profile.'
+                      : 'Manage what users discover today.'}
+                  </h2>
+                  <p>
+                    {authMode === 'signup'
+                      ? 'Create a business account, complete your profile, and keep offers ready for nearby user searches.'
+                      : 'Open your dashboard to update offers, availability, location details, and customer intent signals.'}
+                  </p>
+                </div>
+                <div className="business-auth-points">
+                  <span>Today updates</span>
+                  <span>Offers</span>
+                  <span>Bookings</span>
+                  <span>Discovery tags</span>
+                </div>
+              </aside>
+              <div className="business-auth-panel">
+                <div className="business-auth-tabs">
+                  <button
+                    className={authMode === 'signup' ? 'active' : ''}
+                    type="button"
+                    onClick={() => openAuth('signup')}
+                  >
+                    Signup
+                  </button>
+                  <button
+                    className={authMode === 'login' ? 'active' : ''}
+                    type="button"
+                    onClick={() => openAuth('login')}
+                  >
+                    Login
+                  </button>
+                </div>
+                <ErrorBanner message={error} />
+                {authMode === 'signup' ? (
+                  <BusinessSignupForm busy={busy} onSubmit={signup} />
+                ) : (
+                  <BusinessLoginForm busy={busy} onSubmit={login} />
+                )}
+              </div>
             </div>
-            <ErrorBanner message={error} />
-            {authMode === 'signup' ? (
-              <BusinessSignupForm busy={busy} onSubmit={signup} />
-            ) : (
-              <BusinessLoginForm busy={busy} onSubmit={login} />
-            )}
           </article>
         </div>
       ) : null}
@@ -650,7 +877,7 @@ function BusinessSignupForm({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
   return (
-    <form className="business-form-preview" onSubmit={onSubmit}>
+    <form className="business-form-preview business-auth-form business-signup-form" onSubmit={onSubmit}>
       <div className="business-form-heading">
         <Building2 size={26} />
         <div>
@@ -708,7 +935,7 @@ function BusinessLoginForm({
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
   return (
-    <form className="business-form-preview" onSubmit={onSubmit}>
+    <form className="business-form-preview business-auth-form business-login-form" onSubmit={onSubmit}>
       <div className="business-form-heading">
         <BadgeCheck size={26} />
         <div>
@@ -733,4 +960,25 @@ function BusinessLoginForm({
       </button>
     </form>
   )
+}
+
+function optionalNumber(value: FormDataEntryValue | null) {
+  const text = String(value ?? '').trim()
+  if (!text) return undefined
+  const parsed = Number(text)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+function optionalPriceRange(value: FormDataEntryValue | null) {
+  const text = String(value ?? '').trim()
+  if (
+    text === 'budget' ||
+    text === 'moderate' ||
+    text === 'premium' ||
+    text === 'luxury'
+  ) {
+    return text
+  }
+
+  return undefined
 }

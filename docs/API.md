@@ -45,6 +45,42 @@ Refresh/logout body:
 }
 ```
 
+## Business
+
+| Method | Endpoint | Auth | Purpose |
+| --- | --- | --- | --- |
+| POST | `/business/signup` | No | Create a business account |
+| POST | `/business/login` | No | Log in to a business account |
+| GET | `/business/me` | Business | Return current business profile |
+| PATCH | `/business/me` | Business | Update business profile and onboarding data |
+| GET | `/business/dashboard` | Business | Load business dashboard controls and booking requests |
+| PATCH | `/business/dashboard` | Business | Update today update and live offer controls |
+
+Business profile updates can include discovery fields used later by the user-facing search engine:
+
+```json
+{
+  "business_name": "Johri Restaurant",
+  "business_category": "Restaurant or cafe",
+  "business_subcategory": "North Indian",
+  "location": "Rajouri Garden, New Delhi",
+  "address": "Full street address",
+  "city": "New Delhi",
+  "area": "Rajouri Garden",
+  "latitude": 28.6467,
+  "longitude": 77.1200,
+  "service_radius_km": 5,
+  "price_range": "moderate",
+  "mood_tags": "hungry, friends hangout, family dinner",
+  "service_tags": "north indian, buffet, live music",
+  "best_for": "friends, family, office groups",
+  "website_url": "https://example.com/menu",
+  "whatsapp_number": "+919999999999"
+}
+```
+
+`price_range` must be one of `budget`, `moderate`, `premium`, or `luxury`. Tag fields are comma-separated and normalized by the API.
+
 ## Profiles
 
 | Method | Endpoint | Auth | Purpose |
