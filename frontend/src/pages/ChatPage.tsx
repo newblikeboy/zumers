@@ -5,8 +5,10 @@ import {
   ChevronDown,
   ImagePlus,
   Info,
+  Plus,
   Search,
   Send,
+  Users,
   Wifi,
   WifiOff,
   X,
@@ -19,7 +21,7 @@ import { EmptyState } from '../components/EmptyState'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { api } from '../lib/api'
 import { cloudinaryDeliveryUrl, uploadToCloudinary } from '../lib/cloudinary'
-import type { Conversation, Message, PostMediaInput } from '../lib/types'
+import type { Conversation, Message, PostMediaInput, User } from '../lib/types'
 
 const wsBaseUrl =
   import.meta.env.VITE_WS_BASE_URL ??
@@ -30,10 +32,21 @@ const wsBaseUrl =
 type MessageReceipt = {
   conversation_id: number
   message_ids: number[]
+  messages?: MessageReceiptItem[]
   delivered_at?: string
   read_at?: string
   reader_id?: number
   recipient_id?: number
+}
+
+type MessageReceiptItem = {
+  message_id: number
+  user_id?: number
+  delivered_at?: string
+  read_at?: string
+  recipient_count: number
+  delivered_count: number
+  read_count: number
 }
 
 export function ChatPage() {
@@ -45,6 +58,11 @@ export function ChatPage() {
   const [mediaDraft, setMediaDraft] = useState<PostMediaInput | null>(null)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [conversationQuery, setConversationQuery] = useState('')
+  const [friends, setFriends] = useState<User[]>([])
+  const [groupComposerOpen, setGroupComposerOpen] = useState(false)
+  const [groupTitle, setGroupTitle] = useState('')
+  const [selectedGroupMemberIDs, setSelectedGroupMemberIDs] = useState<number[]>([])
+  const [groupBusy, setGroupBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showScrollToLatest, setShowScrollToLatest] = useState(false)
   const [isMobileChat, setIsMobileChat] = useState(() =>
@@ -68,6 +86,11 @@ export function ChatPage() {
     )
   }
 
+  async function loadFriends() {
+    const response = await api.friends()
+    setFriends(response.friends)
+  }
+
   useEffect(() => {
     const query = window.matchMedia('(max-width: 760px)')
     const update = () => setIsMobileChat(query.matches)
@@ -77,7 +100,7 @@ export function ChatPage() {
   }, [])
 
   useEffect(() => {
-    loadConversations().catch((err) =>
+    Promise.all([loadConversations(), loadFriends()]).catch((err) =>
       setError(err instanceof Error ? err.message : 'Could not load chats'),
     )
   }, [])
@@ -202,6 +225,9 @@ export function ChatPage() {
 
   function applyReceipt(receipt: MessageReceipt, type: 'delivered' | 'read') {
     const messageIDs = receipt.message_ids ?? []
+    const receiptByMessageID = new Map(
+      (receipt.messages ?? []).map((item) => [item.message_id, item]),
+    )
     setMessages((current) =>
       current.map((message) => {
         if (message.conversation_id !== receipt.conversation_id) return message
@@ -210,6 +236,17 @@ export function ChatPage() {
           !messageIDs.includes(message.id)
         ) {
           return message
+        }
+        const item = receiptByMessageID.get(message.id)
+        if (item) {
+          return {
+            ...message,
+            delivered_at: item.delivered_at ?? message.delivered_at,
+            read_at: item.read_at ?? message.read_at,
+            recipient_count: item.recipient_count,
+            delivered_count: item.delivered_count,
+            read_count: item.read_count,
+          }
         }
         if (type === 'read' && receipt.read_at) {
           return {
@@ -286,14 +323,52 @@ export function ChatPage() {
     setMessages((current) => [...current, message])
   }
 
+  async function createGroup(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const title = groupTitle.trim()
+    if (!title || selectedGroupMemberIDs.length < 2) return
+
+    setGroupBusy(true)
+    setError(null)
+    try {
+      const conversation = await api.createGroupConversation({
+        title,
+        member_ids: selectedGroupMemberIDs,
+      })
+      await loadConversations()
+      setActive(conversation)
+      setMobileChatView('thread')
+      setGroupComposerOpen(false)
+      setGroupTitle('')
+      setSelectedGroupMemberIDs([])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create group')
+    } finally {
+      setGroupBusy(false)
+    }
+  }
+
+  function toggleGroupMember(friendID: number) {
+    setSelectedGroupMemberIDs((current) =>
+      current.includes(friendID)
+        ? current.filter((id) => id !== friendID)
+        : [...current, friendID],
+    )
+  }
+
   const filteredConversations = useMemo(() => {
     const term = conversationQuery.trim().toLowerCase()
     if (!term) return conversations
-    return conversations.filter((conversation) =>
-      `${conversation.other_user.display_name} ${conversation.other_user.username}`
+    return conversations.filter((conversation) => {
+      const haystack = [
+        conversationDisplayName(conversation),
+        conversationSubtitle(conversation),
+        ...(conversation.members ?? []).map((member) => `${member.display_name} ${member.username}`),
+      ]
+        .join(' ')
         .toLowerCase()
-        .includes(term),
-    )
+      return haystack.includes(term)
+    })
   }, [conversationQuery, conversations])
 
   return (
@@ -310,9 +385,65 @@ export function ChatPage() {
             <span>Messaging</span>
             <h2>Chats</h2>
           </div>
-          <RealtimeBadge status={realtimeStatus} />
+          <div className="chat-list-actions">
+            <button
+              aria-label="Create group"
+              className="icon-button quiet"
+              type="button"
+              onClick={() => setGroupComposerOpen((open) => !open)}
+            >
+              <Plus size={19} />
+            </button>
+            <RealtimeBadge status={realtimeStatus} />
+          </div>
         </div>
         <ErrorBanner message={error} />
+        {groupComposerOpen ? (
+          <form className="group-composer" onSubmit={createGroup}>
+            <div className="group-composer-heading">
+              <Users size={18} />
+              <strong>New group</strong>
+              <button
+                aria-label="Close group composer"
+                className="icon-button quiet"
+                type="button"
+                onClick={() => setGroupComposerOpen(false)}
+              >
+                <X size={17} />
+              </button>
+            </div>
+            <input
+              maxLength={120}
+              placeholder="Group name"
+              value={groupTitle}
+              onChange={(event) => setGroupTitle(event.target.value)}
+            />
+            <div className="group-member-picker">
+              {friends.map((friend) => (
+                <label key={friend.id} className="group-member-option">
+                  <input
+                    checked={selectedGroupMemberIDs.includes(friend.id)}
+                    type="checkbox"
+                    onChange={() => toggleGroupMember(friend.id)}
+                  />
+                  <Avatar name={friend.display_name} src={friend.avatar_url} />
+                  <span>
+                    <strong>{friend.display_name}</strong>
+                    <small>@{friend.username}</small>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <button
+              className="primary-button"
+              disabled={!groupTitle.trim() || selectedGroupMemberIDs.length < 2 || groupBusy}
+              type="submit"
+            >
+              <Users size={17} />
+              <span>{groupBusy ? 'Creating' : 'Create group'}</span>
+            </button>
+          </form>
+        ) : null}
         <label className="conversation-search">
           <Search size={17} />
           <input
@@ -336,12 +467,9 @@ export function ChatPage() {
                 setMobileChatView('thread')
               }}
             >
-              <Avatar
-                name={conversation.other_user.display_name}
-                src={conversation.other_user.avatar_url}
-              />
+              <ConversationAvatar conversation={conversation} />
               <div>
-                <strong>{conversation.other_user.display_name}</strong>
+                <strong>{conversationDisplayName(conversation)}</strong>
                 <span>{conversation.latest_message?.content ?? 'No messages yet'}</span>
               </div>
               <small>{formatShortTime(conversation.updated_at)}</small>
@@ -363,12 +491,12 @@ export function ChatPage() {
                 <ArrowLeft size={21} />
               </button>
               <Avatar
-                name={active.other_user.display_name}
-                src={active.other_user.avatar_url}
+                name={conversationDisplayName(active)}
+                src={conversationAvatarUrl(active)}
               />
               <div>
-                <h2>{active.other_user.display_name}</h2>
-                <span>@{active.other_user.username} - friend conversation</span>
+                <h2>{conversationDisplayName(active)}</h2>
+                <span>{conversationSubtitle(active)}</span>
               </div>
               <button className="icon-button quiet" title="Conversation details">
                 <Info size={19} />
@@ -386,11 +514,7 @@ export function ChatPage() {
                     key={message.id}
                     message={message}
                     mine={message.sender_id === user?.id}
-                    receipt={
-                      message.sender_id === user?.id
-                        ? messageReceipt(message)
-                        : undefined
-                    }
+                    receipt={message.sender_id === user?.id ? messageReceipt(message) : undefined}
                   />
                 ))}
               </div>
@@ -465,6 +589,47 @@ export function ChatPage() {
   )
 }
 
+function ConversationAvatar({ conversation }: { conversation: Conversation }) {
+  if (conversation.conversation_type === 'group') {
+    return (
+      <span className="group-avatar" aria-hidden="true">
+        <Users size={21} />
+      </span>
+    )
+  }
+
+  return (
+    <Avatar
+      name={conversationDisplayName(conversation)}
+      src={conversationAvatarUrl(conversation)}
+    />
+  )
+}
+
+function conversationDisplayName(conversation: Conversation) {
+  if (conversation.conversation_type === 'group') {
+    return conversation.title ?? 'Group chat'
+  }
+
+  return conversation.other_user?.display_name ?? 'Chat'
+}
+
+function conversationAvatarUrl(conversation: Conversation) {
+  return conversation.conversation_type === 'direct'
+    ? conversation.other_user?.avatar_url
+    : undefined
+}
+
+function conversationSubtitle(conversation: Conversation) {
+  if (conversation.conversation_type === 'group') {
+    return `${conversation.member_count} members`
+  }
+
+  return conversation.other_user
+    ? `@${conversation.other_user.username} - friend conversation`
+    : 'Friend conversation'
+}
+
 function RealtimeBadge({ status }: { status: 'Connecting' | 'Live' | 'Reconnecting' }) {
   const online = status === 'Live'
   return (
@@ -499,7 +664,9 @@ function MessageBubble({
         {message.content ? <span className="message-text">{message.content}</span> : null}
         <small className="message-meta">
           <span>{formatShortTime(message.created_at)}</span>
-          {receipt ? <MessageReceiptIndicator status={receipt} /> : null}
+          {receipt ? (
+            <MessageReceiptIndicator message={message} status={receipt} />
+          ) : null}
         </small>
       </div>
     </div>
@@ -507,13 +674,16 @@ function MessageBubble({
 }
 
 function MessageReceiptIndicator({
+  message,
   status,
 }: {
+  message: Message
   status: 'sent' | 'delivered' | 'read'
 }) {
+  const title = receiptTitle(message, status)
   if (status === 'sent') {
     return (
-      <span className="message-receipt" title="Sent">
+      <span className="message-receipt" title={title}>
         <Check size={14} strokeWidth={2.5} />
       </span>
     )
@@ -524,7 +694,7 @@ function MessageReceiptIndicator({
       className={
         status === 'read' ? 'message-receipt read' : 'message-receipt delivered'
       }
-      title={status === 'read' ? 'Read' : 'Delivered'}
+      title={title}
     >
       <CheckCheck size={15} strokeWidth={2.5} />
     </span>
@@ -532,9 +702,30 @@ function MessageReceiptIndicator({
 }
 
 function messageReceipt(message: Message): 'sent' | 'delivered' | 'read' {
+  if (message.recipient_count > 0) {
+    if (message.read_count >= message.recipient_count) return 'read'
+    if (message.delivered_count >= message.recipient_count) return 'delivered'
+    return 'sent'
+  }
   if (message.read_at) return 'read'
   if (message.delivered_at) return 'delivered'
   return 'sent'
+}
+
+function receiptTitle(message: Message, status: 'sent' | 'delivered' | 'read') {
+  if (message.recipient_count > 0) {
+    if (status === 'read') {
+      return `Seen by ${message.read_count}/${message.recipient_count}`
+    }
+    if (status === 'delivered') {
+      return `Delivered to ${message.delivered_count}/${message.recipient_count}`
+    }
+    return `Sent - delivered to ${message.delivered_count}/${message.recipient_count}`
+  }
+
+  if (status === 'read') return 'Read'
+  if (status === 'delivered') return 'Delivered'
+  return 'Sent'
 }
 
 function formatShortTime(value: string) {

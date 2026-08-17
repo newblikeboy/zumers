@@ -67,6 +67,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/friends/requests/{id}/accept", s.withAuth(s.handleFriendRequestAccept))
 	s.mux.HandleFunc("POST /api/v1/friends/requests/{id}/reject", s.withAuth(s.handleFriendRequestReject))
 	s.mux.HandleFunc("GET /api/v1/friends", s.withAuth(s.handleFriendsList))
+	s.mux.HandleFunc("GET /api/v1/friends/suggestions", s.withAuth(s.handleFriendSuggestions))
 	s.mux.HandleFunc("DELETE /api/v1/friends/{id}", s.withAuth(s.handleUnfriend))
 
 	s.mux.HandleFunc("POST /api/v1/posts", s.withAuth(s.withRateLimit("posts", 30, 10, s.handlePostCreate)))

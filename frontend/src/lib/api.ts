@@ -7,6 +7,7 @@ import type {
   Conversation,
   Comment,
   FriendRequest,
+  FriendSuggestion,
   Message,
   NotificationItem,
   Post,
@@ -133,6 +134,9 @@ export const api = {
 
   friends: () => apiRequest<{ friends: User[] }>('/friends'),
 
+  friendSuggestions: () =>
+    apiRequest<{ suggestions: FriendSuggestion[] }>('/friends/suggestions'),
+
   unfriend: (id: number) =>
     apiRequest<void>(`/friends/${id}`, {
       method: 'DELETE',
@@ -206,6 +210,12 @@ export const api = {
     apiRequest<Conversation>('/conversations', {
       method: 'POST',
       body: JSON.stringify({ friend_id: friendId }),
+    }),
+
+  createGroupConversation: (body: { title: string; member_ids: number[] }) =>
+    apiRequest<Conversation>('/conversations', {
+      method: 'POST',
+      body: JSON.stringify(body),
     }),
 
   messages: (conversationId: number) =>

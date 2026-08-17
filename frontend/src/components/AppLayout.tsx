@@ -87,13 +87,17 @@ export function AppLayout() {
   const contacts = useMemo(() => {
     const conversationByUser = new Map<number, Conversation>()
     conversations.forEach((conversation) => {
-      conversationByUser.set(conversation.other_user.id, conversation)
+      if (conversation.other_user) {
+        conversationByUser.set(conversation.other_user.id, conversation)
+      }
     })
 
     const byID = new Map<number, User>()
     friends.forEach((friend) => byID.set(friend.id, friend))
     conversations.forEach((conversation) => {
-      byID.set(conversation.other_user.id, conversation.other_user)
+      if (conversation.other_user) {
+        byID.set(conversation.other_user.id, conversation.other_user)
+      }
     })
 
     const term = contactQuery.trim().toLowerCase()

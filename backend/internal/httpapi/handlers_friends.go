@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/jackc/pgconn"
 )
@@ -21,6 +22,12 @@ type friendRequestResponse struct {
 	Status     string        `json:"status"`
 	CreatedAt  string        `json:"created_at"`
 	UpdatedAt  string        `json:"updated_at"`
+}
+
+type friendSuggestionResponse struct {
+	User              userResponse `json:"user"`
+	MutualFriendCount int          `json:"mutual_friend_count"`
+	Reason            string       `json:"reason"`
 }
 
 func (s *Server) handleFriendRequestCreate(w http.ResponseWriter, r *http.Request) {
@@ -304,6 +311,117 @@ func (s *Server) handleFriendsList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"friends": friends})
 }
 
+func (s *Server) handleFriendSuggestions(w http.ResponseWriter, r *http.Request) {
+	userID := currentUserID(r)
+	rows, err := s.db.QueryContext(
+		r.Context(),
+		`WITH viewer_friends AS (
+		   SELECT CASE WHEN f.user_id = $1 THEN f.friend_id ELSE f.user_id END AS friend_id
+		   FROM friendships f
+		   WHERE f.user_id = $1 OR f.friend_id = $1
+		 ),
+		 second_degree AS (
+		   SELECT
+		     CASE WHEN f.user_id = vf.friend_id THEN f.friend_id ELSE f.user_id END AS candidate_id,
+		     COUNT(DISTINCT vf.friend_id) AS mutual_friend_count
+		   FROM viewer_friends vf
+		   JOIN friendships f ON f.user_id = vf.friend_id OR f.friend_id = vf.friend_id
+		   WHERE CASE WHEN f.user_id = vf.friend_id THEN f.friend_id ELSE f.user_id END <> $1
+		   GROUP BY CASE WHEN f.user_id = vf.friend_id THEN f.friend_id ELSE f.user_id END
+		 ),
+		 viewer_profile AS (
+		   SELECT location
+		   FROM profiles
+		   WHERE user_id = $1
+		 ),
+		 ranked_candidates AS (
+		   SELECT u.id, u.email, u.date_of_birth::text, u.account_status,
+		          p.display_name, p.username, p.bio, p.location, p.avatar_url, p.avatar_public_id, p.cover_url, p.cover_public_id, p.profile_visibility,
+		          u.created_at, u.updated_at,
+		          COALESCE(sd.mutual_friend_count, 0) AS mutual_friend_count,
+		          COALESCE(NULLIF(BTRIM(LOWER(p.location)), '') = NULLIF(BTRIM(LOWER(vp.location)), ''), false) AS same_location,
+		          u.created_at > CURRENT_TIMESTAMP - INTERVAL '30 days' AS recently_joined
+		   FROM users u
+		   JOIN profiles p ON p.user_id = u.id
+		   CROSS JOIN viewer_profile vp
+		   LEFT JOIN second_degree sd ON sd.candidate_id = u.id
+		   WHERE u.id <> $1
+		     AND u.account_status = 'active'
+		     AND NOT EXISTS (
+		       SELECT 1
+		       FROM friendships existing
+		       WHERE existing.user_id = LEAST($1, u.id)
+		         AND existing.friend_id = GREATEST($1, u.id)
+		     )
+		     AND NOT EXISTS (
+		       SELECT 1
+		       FROM friend_requests fr
+		       WHERE fr.status = 'pending'
+		         AND ((fr.sender_id = $1 AND fr.receiver_id = u.id) OR (fr.sender_id = u.id AND fr.receiver_id = $1))
+		     )
+		 )
+		 SELECT id, email, date_of_birth, account_status,
+		        display_name, username, bio, location, avatar_url, avatar_public_id, cover_url, cover_public_id, profile_visibility,
+		        created_at, updated_at, mutual_friend_count, same_location, recently_joined
+		 FROM ranked_candidates
+		 ORDER BY mutual_friend_count DESC,
+		          same_location DESC,
+		          recently_joined DESC,
+		          created_at DESC,
+		          display_name
+		 LIMIT $2`,
+		userID,
+		pageLimit(r, 20, 50),
+	)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load friend suggestions")
+		return
+	}
+	defer rows.Close()
+
+	suggestions := make([]friendSuggestionResponse, 0)
+	for rows.Next() {
+		var suggestion friendSuggestionResponse
+		var bio, location, avatarURL, avatarPublicID, coverURL, coverPublicID sql.NullString
+		var sameLocation, recentlyJoined bool
+		err := rows.Scan(
+			&suggestion.User.ID,
+			&suggestion.User.Email,
+			&suggestion.User.DateOfBirth,
+			&suggestion.User.AccountStatus,
+			&suggestion.User.DisplayName,
+			&suggestion.User.Username,
+			&bio,
+			&location,
+			&avatarURL,
+			&avatarPublicID,
+			&coverURL,
+			&coverPublicID,
+			&suggestion.User.ProfileVisibility,
+			&suggestion.User.CreatedAt,
+			&suggestion.User.UpdatedAt,
+			&suggestion.MutualFriendCount,
+			&sameLocation,
+			&recentlyJoined,
+		)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "could not read friend suggestions")
+			return
+		}
+
+		suggestion.User.Bio = nullableString(bio)
+		suggestion.User.Location = nullableString(location)
+		suggestion.User.AvatarURL = nullableString(avatarURL)
+		suggestion.User.AvatarPublicID = nullableString(avatarPublicID)
+		suggestion.User.CoverURL = nullableString(coverURL)
+		suggestion.User.CoverPublicID = nullableString(coverPublicID)
+		suggestion.Reason = friendSuggestionReason(suggestion.MutualFriendCount, sameLocation, recentlyJoined)
+		suggestions = append(suggestions, suggestion)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"suggestions": suggestions})
+}
+
 func (s *Server) handleUnfriend(w http.ResponseWriter, r *http.Request) {
 	friendID, err := parseID(r.PathValue("id"))
 	if err != nil {
@@ -323,4 +441,21 @@ func (s *Server) handleUnfriend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func friendSuggestionReason(mutualFriendCount int, sameLocation bool, recentlyJoined bool) string {
+	if mutualFriendCount == 1 {
+		return "1 mutual friend"
+	}
+	if mutualFriendCount > 1 {
+		return strconv.Itoa(mutualFriendCount) + " mutual friends"
+	}
+	if sameLocation {
+		return "Lives near you"
+	}
+	if recentlyJoined {
+		return "New to Zumers"
+	}
+
+	return "Suggested for you"
 }

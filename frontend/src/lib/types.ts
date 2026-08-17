@@ -126,6 +126,12 @@ export type FriendRequest = {
   updated_at: string
 }
 
+export type FriendSuggestion = {
+  user: User
+  mutual_friend_count: number
+  reason: string
+}
+
 export type Message = {
   id: number
   conversation_id: number
@@ -136,14 +142,22 @@ export type Message = {
   media_public_id?: string
   delivered_at?: string
   read_at?: string
+  recipient_count: number
+  delivered_count: number
+  read_count: number
   created_at: string
 }
 
 export type Conversation = {
   id: number
-  user_one_id: number
-  user_two_id: number
-  other_user: User
+  user_one_id?: number
+  user_two_id?: number
+  conversation_type: 'direct' | 'group'
+  title?: string
+  created_by?: number
+  other_user?: User
+  members: User[]
+  member_count: number
   latest_message?: Message
   created_at: string
   updated_at: string

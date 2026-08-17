@@ -117,21 +117,8 @@ func (s *Server) handleChatWebSocket(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			recipientID, _ := s.conversationRecipient(r.Context(), event.ConversationID, userID)
-			delivered := s.chatHub.SendToUser(recipientID, "message.created", message) > 0
-			if delivered {
-				if deliveredAt, err := s.markMessageDelivered(r.Context(), message.ID, recipientID); err == nil && deliveredAt != nil {
-					message.DeliveredAt = deliveredAt
-					receipt := messageReceiptResponse{
-						ConversationID: message.ConversationID,
-						MessageIDs:     []int64{message.ID},
-						DeliveredAt:    deliveredAt,
-						RecipientID:    recipientID,
-					}
-					s.chatHub.SendToUser(userID, "message.delivered", receipt)
-					s.chatHub.SendToUser(recipientID, "message.delivered", receipt)
-				}
-			}
+			s.deliverMessageToConversation(r.Context(), message)
+			_ = s.hydrateMessageReceiptCounts(r.Context(), &message)
 			s.chatHub.SendToUser(userID, "message.created", message)
 		case "conversation.read":
 			if event.ConversationID <= 0 || !s.isConversationParticipant(r.Context(), event.ConversationID, userID) {
@@ -145,9 +132,10 @@ func (s *Server) handleChatWebSocket(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			senderID, _ := s.conversationRecipient(r.Context(), event.ConversationID, userID)
-			s.chatHub.SendToUser(senderID, "conversation.read", receipt)
-			s.chatHub.SendToUser(userID, "conversation.read", receipt)
+			memberIDs, _ := s.conversationMemberIDs(r.Context(), event.ConversationID)
+			for _, memberID := range memberIDs {
+				s.chatHub.SendToUser(memberID, "conversation.read", receipt)
+			}
 		default:
 			_ = conn.WriteJSON(webSocketEvent{Type: "error", Data: map[string]string{"message": "unknown event type"}})
 		}

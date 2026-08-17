@@ -63,7 +63,10 @@ Refresh/logout body:
 | POST | `/friends/requests/{id}/accept` | Yes | Accept request |
 | POST | `/friends/requests/{id}/reject` | Yes | Reject request |
 | GET | `/friends` | Yes | List friends |
+| GET | `/friends/suggestions` | Yes | Ranked friend suggestions |
 | DELETE | `/friends/{id}` | Yes | Unfriend |
+
+Friend suggestions rank active non-friends by mutual friends, same location, and recent account creation. Existing friends, self, and users with pending requests in either direction are excluded.
 
 ## Posts
 
@@ -131,7 +134,7 @@ The signed upload response includes allowed MIME prefixes and max upload limits.
 | Method | Endpoint | Auth | Purpose |
 | --- | --- | --- | --- |
 | GET | `/conversations` | Yes | List conversations |
-| POST | `/conversations` | Yes | Create or return a friend conversation |
+| POST | `/conversations` | Yes | Create or return a friend conversation, or create a group conversation |
 | GET | `/conversations/{id}/messages` | Yes | List message history |
 | POST | `/conversations/{id}/messages` | Yes | Send a message |
 | POST | `/conversations/{id}/read` | Yes | Mark received messages as read |
@@ -145,6 +148,17 @@ Create conversation body:
 }
 ```
 
+Create group conversation body:
+
+```json
+{
+  "title": "Weekend plans",
+  "member_ids": [2, 3, 4]
+}
+```
+
+Group creation requires at least two selected friends. The current user is added as the group owner automatically.
+
 Send message body:
 
 ```json
@@ -153,6 +167,18 @@ Send message body:
   "content": "Hello"
 }
 ```
+
+Message responses include receipt totals for direct and group chats:
+
+```json
+{
+  "recipient_count": 3,
+  "delivered_count": 3,
+  "read_count": 2
+}
+```
+
+The frontend uses those totals for sent, delivered, and seen indicators.
 
 WebSocket send event:
 

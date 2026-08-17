@@ -2979,9 +2979,91 @@ body {
   margin-bottom: 12px;
 }
 
+.chat-list-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
 .chat-list-header h2 {
   font-size: 1.55rem;
   margin: 0;
+}
+
+.group-composer {
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+}
+
+.group-composer-heading {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.group-composer input[type='text'],
+.group-composer > input {
+  background: var(--chip);
+  border: 0;
+  border-radius: 999px;
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.group-member-picker {
+  display: grid;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.group-member-option {
+  align-items: center;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  min-height: 50px;
+  padding: 6px;
+}
+
+.group-member-option:hover {
+  background: var(--chip);
+}
+
+.group-member-option .avatar {
+  height: 36px;
+  width: 36px;
+}
+
+.group-member-option span,
+.group-member-option strong,
+.group-member-option small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-member-option small {
+  color: var(--muted);
+}
+
+.group-avatar {
+  align-items: center;
+  background: var(--blue-soft);
+  border-radius: 50%;
+  color: var(--blue);
+  display: inline-flex;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
 }
 
 .realtime-badge {
@@ -5791,6 +5873,63 @@ body {
   width: 100%;
 }
 
+.birthday-group {
+  display: grid;
+  gap: 10px;
+}
+
+.birthday-group h3 {
+  color: var(--muted);
+  font-size: 0.88rem;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.birthday-list {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: var(--shadow-soft);
+  display: grid;
+  overflow: hidden;
+}
+
+.birthday-row {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 72px;
+  padding: 10px 14px;
+}
+
+.birthday-row + .birthday-row {
+  border-top: 1px solid var(--line-soft);
+}
+
+.birthday-row .avatar {
+  height: 48px;
+  width: 48px;
+}
+
+.birthday-row strong,
+.birthday-row span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.birthday-row span,
+.birthday-row small {
+  color: var(--muted);
+}
+
+.birthday-row small {
+  font-weight: 800;
+  text-align: right;
+  white-space: nowrap;
+}
+
 @media (max-width: 980px) {
   .app-frame {
     display: block;
@@ -6977,7 +7116,8 @@ body {
   }
 
   .friend-suggestions-section,
-  .all-friends-section {
+  .all-friends-section,
+  .birthdays-section {
     border-top: 8px solid var(--page);
     margin: 0 -16px;
     padding: 16px 16px 0;
@@ -6986,6 +7126,15 @@ body {
   .friend-suggestions-section .friend-card-grid,
   .all-friends-section .friend-card-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .birthday-list {
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .birthday-row {
+    padding: 10px 0;
   }
 }
 
