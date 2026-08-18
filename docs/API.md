@@ -194,6 +194,7 @@ Create group conversation body:
 ```
 
 Group creation requires at least two selected friends. The current user is added as the group owner automatically.
+Conversation `members` include `role`, with `owner` representing the group admin.
 
 Send message body:
 
@@ -214,7 +215,7 @@ Message responses include receipt totals for direct and group chats:
 }
 ```
 
-The frontend uses those totals for sent, delivered, and seen indicators.
+Message responses also include per-recipient `receipts` with `user`, `delivered_at`, and `read_at` fields so the frontend can show message info for group chats. The frontend uses the totals and receipt rows for sent, delivered, and seen indicators.
 
 WebSocket send event:
 

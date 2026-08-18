@@ -3,6 +3,7 @@ import {
   Check,
   CheckCheck,
   ChevronDown,
+  Crown,
   ImagePlus,
   Info,
   Plus,
@@ -37,11 +38,13 @@ type MessageReceipt = {
   read_at?: string
   reader_id?: number
   recipient_id?: number
+  recipient_ids?: number[]
 }
 
 type MessageReceiptItem = {
   message_id: number
   user_id?: number
+  user?: User
   delivered_at?: string
   read_at?: string
   recipient_count: number
@@ -65,6 +68,8 @@ export function ChatPage() {
   const [groupBusy, setGroupBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showScrollToLatest, setShowScrollToLatest] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [selectedMessageID, setSelectedMessageID] = useState<number | null>(null)
   const [isMobileChat, setIsMobileChat] = useState(() =>
     typeof window !== 'undefined'
       ? window.matchMedia('(max-width: 760px)').matches
@@ -81,9 +86,12 @@ export function ChatPage() {
   async function loadConversations() {
     const response = await api.conversations()
     setConversations(response.conversations)
-    setActive((current) =>
-      current ?? (isMobileChat ? null : response.conversations[0] ?? null),
-    )
+    setActive((current) => {
+      if (current) {
+        return response.conversations.find((conversation) => conversation.id === current.id) ?? current
+      }
+      return isMobileChat ? null : response.conversations[0] ?? null
+    })
   }
 
   async function loadFriends() {
@@ -113,6 +121,11 @@ export function ChatPage() {
   useEffect(() => {
     activeRef.current = active
   }, [active])
+
+  useEffect(() => {
+    setDetailsOpen(false)
+    setSelectedMessageID(null)
+  }, [active?.id])
 
   useEffect(() => {
     if (!active) return
@@ -239,24 +252,28 @@ export function ChatPage() {
         }
         const item = receiptByMessageID.get(message.id)
         if (item) {
-          return {
+          return updateReceiptParticipants({
             ...message,
             delivered_at: item.delivered_at ?? message.delivered_at,
             read_at: item.read_at ?? message.read_at,
             recipient_count: item.recipient_count,
             delivered_count: item.delivered_count,
             read_count: item.read_count,
-          }
+          }, receipt, type)
         }
         if (type === 'read' && receipt.read_at) {
-          return {
+          return updateReceiptParticipants({
             ...message,
             delivered_at: message.delivered_at ?? receipt.read_at,
             read_at: receipt.read_at,
-          }
+          }, receipt, type)
         }
         if (type === 'delivered' && receipt.delivered_at) {
-          return { ...message, delivered_at: receipt.delivered_at }
+          return updateReceiptParticipants(
+            { ...message, delivered_at: receipt.delivered_at },
+            receipt,
+            type,
+          )
         }
         return message
       }),
@@ -370,6 +387,11 @@ export function ChatPage() {
       return haystack.includes(term)
     })
   }, [conversationQuery, conversations])
+
+  const selectedMessage = useMemo(
+    () => messages.find((message) => message.id === selectedMessageID) ?? null,
+    [messages, selectedMessageID],
+  )
 
   return (
     <section
@@ -498,7 +520,16 @@ export function ChatPage() {
                 <h2>{conversationDisplayName(active)}</h2>
                 <span>{conversationSubtitle(active)}</span>
               </div>
-              <button className="icon-button quiet" title="Conversation details">
+              <button
+                aria-label="Conversation details"
+                className="icon-button quiet"
+                title="Conversation details"
+                type="button"
+                onClick={() => {
+                  setSelectedMessageID(null)
+                  setDetailsOpen(true)
+                }}
+              >
                 <Info size={19} />
               </button>
             </header>
@@ -514,7 +545,13 @@ export function ChatPage() {
                     key={message.id}
                     message={message}
                     mine={message.sender_id === user?.id}
+                    sender={active.members.find((member) => member.id === message.sender_id)}
+                    showSender={active.conversation_type === 'group' && message.sender_id !== user?.id}
                     receipt={message.sender_id === user?.id ? messageReceipt(message) : undefined}
+                    onOpenInfo={() => {
+                      setSelectedMessageID(message.id)
+                      setDetailsOpen(true)
+                    }}
                   />
                 ))}
               </div>
@@ -580,6 +617,18 @@ export function ChatPage() {
                 </button>
               </div>
             </form>
+
+            {detailsOpen ? (
+              <ConversationDetailsPanel
+                conversation={active}
+                currentUserID={user?.id}
+                selectedMessage={selectedMessage}
+                onClose={() => {
+                  setDetailsOpen(false)
+                  setSelectedMessageID(null)
+                }}
+              />
+            ) : null}
           </>
         ) : (
           <EmptyState title="Select a conversation" />
@@ -643,15 +692,24 @@ function RealtimeBadge({ status }: { status: 'Connecting' | 'Live' | 'Reconnecti
 function MessageBubble({
   message,
   mine,
+  sender,
+  showSender,
   receipt,
+  onOpenInfo,
 }: {
   message: Message
   mine: boolean
+  sender?: User
+  showSender: boolean
   receipt?: 'sent' | 'delivered' | 'read'
+  onOpenInfo: () => void
 }) {
   return (
     <div className={mine ? 'message mine' : 'message'}>
       <div className={message.media_url ? 'message-bubble media' : 'message-bubble'}>
+        {showSender ? (
+          <strong className="message-sender">{sender?.display_name ?? 'Member'}</strong>
+        ) : null}
         {message.media_url ? (
           <div className="message-media">
             {message.message_type === 'video' ? (
@@ -665,7 +723,11 @@ function MessageBubble({
         <small className="message-meta">
           <span>{formatShortTime(message.created_at)}</span>
           {receipt ? (
-            <MessageReceiptIndicator message={message} status={receipt} />
+            <MessageReceiptIndicator
+              message={message}
+              status={receipt}
+              onOpenInfo={onOpenInfo}
+            />
           ) : null}
         </small>
       </div>
@@ -676,28 +738,215 @@ function MessageBubble({
 function MessageReceiptIndicator({
   message,
   status,
+  onOpenInfo,
 }: {
   message: Message
   status: 'sent' | 'delivered' | 'read'
+  onOpenInfo: () => void
 }) {
   const title = receiptTitle(message, status)
+  const countLabel =
+    message.recipient_count > 1
+      ? `${status === 'read' ? message.read_count : message.delivered_count}/${message.recipient_count}`
+      : null
   if (status === 'sent') {
     return (
-      <span className="message-receipt" title={title}>
+      <button
+        aria-label={title}
+        className="message-receipt"
+        title={title}
+        type="button"
+        onClick={onOpenInfo}
+      >
         <Check size={14} strokeWidth={2.5} />
-      </span>
+        {countLabel ? <span>{countLabel}</span> : null}
+      </button>
     )
   }
 
   return (
-    <span
+    <button
+      aria-label={title}
       className={
         status === 'read' ? 'message-receipt read' : 'message-receipt delivered'
       }
       title={title}
+      type="button"
+      onClick={onOpenInfo}
     >
       <CheckCheck size={15} strokeWidth={2.5} />
-    </span>
+      {countLabel ? <span>{countLabel}</span> : null}
+    </button>
+  )
+}
+
+function ConversationDetailsPanel({
+  conversation,
+  currentUserID,
+  selectedMessage,
+  onClose,
+}: {
+  conversation: Conversation
+  currentUserID?: number
+  selectedMessage: Message | null
+  onClose: () => void
+}) {
+  const ownerID = conversation.created_by
+  const members = [...(conversation.members ?? [])].sort((first, second) => {
+    const firstOwner = first.role === 'owner' || first.id === ownerID
+    const secondOwner = second.role === 'owner' || second.id === ownerID
+    if (firstOwner !== secondOwner) return firstOwner ? -1 : 1
+    return first.display_name.localeCompare(second.display_name)
+  })
+
+  return (
+    <aside className="chat-details-panel">
+      <header>
+        <button
+          aria-label="Close details"
+          className="icon-button quiet"
+          type="button"
+          onClick={onClose}
+        >
+          <X size={19} />
+        </button>
+        <div>
+          <span>{selectedMessage ? 'Message info' : 'Conversation info'}</span>
+          <h3>{selectedMessage ? messageStatusLabel(selectedMessage) : conversationDisplayName(conversation)}</h3>
+        </div>
+      </header>
+
+      {selectedMessage ? (
+        <MessageInfo message={selectedMessage} members={members} />
+      ) : (
+        <div className="chat-details-body">
+          <div className="group-profile">
+            <ConversationAvatar conversation={conversation} />
+            <h3>{conversationDisplayName(conversation)}</h3>
+            <span>{conversationSubtitle(conversation)}</span>
+          </div>
+
+          <section className="details-section">
+            <div className="details-section-heading">
+              <strong>{conversation.conversation_type === 'group' ? 'Members' : 'Contact'}</strong>
+              <span>{members.length}</span>
+            </div>
+            <div className="member-list">
+              {members.map((member) => (
+                <MemberRow
+                  key={member.id}
+                  member={member}
+                  isCurrentUser={member.id === currentUserID}
+                  isOwner={member.role === 'owner' || member.id === ownerID}
+                />
+              ))}
+            </div>
+          </section>
+        </div>
+      )}
+    </aside>
+  )
+}
+
+function MessageInfo({ message, members }: { message: Message; members: User[] }) {
+  const receiptMembers = members.filter((member) => member.id !== message.sender_id)
+  const receiptsByUserID = new Map(
+    (message.receipts ?? [])
+      .filter((receipt) => receipt.user_id)
+      .map((receipt) => [receipt.user_id, receipt]),
+  )
+  const memberReceipts = receiptMembers.map((member) => ({
+    member,
+    receipt: receiptsByUserID.get(member.id),
+  }))
+  const readBy = memberReceipts.filter((item) => item.receipt?.read_at)
+  const deliveredTo = memberReceipts.filter(
+    (item) => item.receipt?.delivered_at && !item.receipt.read_at,
+  )
+  const waitingFor = memberReceipts.filter((item) => !item.receipt?.delivered_at)
+
+  return (
+    <div className="chat-details-body">
+      <div className="message-info-card">
+        <span>{message.content ?? message.message_type}</span>
+        <small>{formatLongTime(message.created_at)}</small>
+      </div>
+      <div className="message-status-summary">
+        <span>
+          <CheckCheck size={16} />
+          Delivered {message.delivered_count}/{message.recipient_count}
+        </span>
+        <span className={message.read_count > 0 ? 'read' : undefined}>
+          <CheckCheck size={16} />
+          Seen {message.read_count}/{message.recipient_count}
+        </span>
+      </div>
+
+      <ReceiptSection title="Read by" items={readBy} timeKey="read_at" />
+      <ReceiptSection title="Delivered to" items={deliveredTo} timeKey="delivered_at" />
+      <ReceiptSection title="Waiting for" items={waitingFor} />
+    </div>
+  )
+}
+
+function ReceiptSection({
+  title,
+  items,
+  timeKey,
+}: {
+  title: string
+  items: { member: User; receipt?: MessageReceiptItem }[]
+  timeKey?: 'delivered_at' | 'read_at'
+}) {
+  return (
+    <section className="details-section">
+      <div className="details-section-heading">
+        <strong>{title}</strong>
+        <span>{items.length}</span>
+      </div>
+      <div className="member-list">
+        {items.length === 0 ? (
+          <div className="details-empty">No one yet</div>
+        ) : (
+          items.map(({ member, receipt }) => (
+            <MemberRow
+              key={member.id}
+              member={member}
+              meta={timeKey && receipt?.[timeKey] ? formatShortTime(receipt[timeKey]) : 'Not delivered'}
+              isOwner={member.role === 'owner'}
+            />
+          ))
+        )}
+      </div>
+    </section>
+  )
+}
+
+function MemberRow({
+  member,
+  isCurrentUser,
+  isOwner,
+  meta,
+}: {
+  member: User
+  isCurrentUser?: boolean
+  isOwner?: boolean
+  meta?: string
+}) {
+  return (
+    <div className="member-row">
+      <Avatar name={member.display_name} src={member.avatar_url} />
+      <span>
+        <strong>{isCurrentUser ? `${member.display_name} (You)` : member.display_name}</strong>
+        <small>{meta ?? `@${member.username}`}</small>
+      </span>
+      {isOwner ? (
+        <em>
+          <Crown size={13} />
+          Admin
+        </em>
+      ) : null}
+    </div>
   )
 }
 
@@ -728,8 +977,56 @@ function receiptTitle(message: Message, status: 'sent' | 'delivered' | 'read') {
   return 'Sent'
 }
 
+function messageStatusLabel(message: Message) {
+  const status = messageReceipt(message)
+  if (status === 'read') return `Seen by ${message.read_count}/${message.recipient_count}`
+  if (status === 'delivered') {
+    return `Delivered to ${message.delivered_count}/${message.recipient_count}`
+  }
+  return `Sent to ${message.recipient_count} recipient${message.recipient_count === 1 ? '' : 's'}`
+}
+
+function updateReceiptParticipants(
+  message: Message,
+  receipt: MessageReceipt,
+  type: 'delivered' | 'read',
+) {
+  if (!message.receipts?.length) return message
+
+  const userIDs =
+    type === 'read'
+      ? receipt.reader_id
+        ? [receipt.reader_id]
+        : []
+      : receipt.recipient_ids ?? (receipt.recipient_id ? [receipt.recipient_id] : [])
+  if (userIDs.length === 0) return message
+
+  const timestamp = type === 'read' ? receipt.read_at : receipt.delivered_at
+  if (!timestamp) return message
+
+  return {
+    ...message,
+    receipts: message.receipts.map((item) => {
+      if (!item.user_id || !userIDs.includes(item.user_id)) return item
+      return {
+        ...item,
+        delivered_at: item.delivered_at ?? timestamp,
+        read_at: type === 'read' ? item.read_at ?? timestamp : item.read_at,
+      }
+    }),
+  }
+}
+
 function formatShortTime(value: string) {
   return new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
+
+function formatLongTime(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
     hour: 'numeric',
     minute: '2-digit',
   }).format(new Date(value))

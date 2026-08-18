@@ -61,16 +61,18 @@ type messageReceiptResponse struct {
 	ReadAt         *string              `json:"read_at,omitempty"`
 	ReaderID       int64                `json:"reader_id,omitempty"`
 	RecipientID    int64                `json:"recipient_id,omitempty"`
+	RecipientIDs   []int64              `json:"recipient_ids,omitempty"`
 }
 
 type messageReceiptItem struct {
-	MessageID      int64   `json:"message_id"`
-	UserID         int64   `json:"user_id,omitempty"`
-	DeliveredAt    *string `json:"delivered_at,omitempty"`
-	ReadAt         *string `json:"read_at,omitempty"`
-	RecipientCount int     `json:"recipient_count"`
-	DeliveredCount int     `json:"delivered_count"`
-	ReadCount      int     `json:"read_count"`
+	MessageID      int64         `json:"message_id"`
+	UserID         int64         `json:"user_id,omitempty"`
+	User           *userResponse `json:"user,omitempty"`
+	DeliveredAt    *string       `json:"delivered_at,omitempty"`
+	ReadAt         *string       `json:"read_at,omitempty"`
+	RecipientCount int           `json:"recipient_count"`
+	DeliveredCount int           `json:"delivered_count"`
+	ReadCount      int           `json:"read_count"`
 }
 
 func (s *Server) handleConversationCreate(w http.ResponseWriter, r *http.Request) {
@@ -474,6 +476,31 @@ func (s *Server) conversationMemberIDs(ctx context.Context, conversationID int64
 	return memberIDs, rows.Err()
 }
 
+func (s *Server) conversationMemberRoles(ctx context.Context, conversationID int64) (map[int64]string, error) {
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT user_id, role
+		 FROM conversation_members
+		 WHERE conversation_id = $1 AND left_at IS NULL`,
+		conversationID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	rolesByUserID := make(map[int64]string)
+	for rows.Next() {
+		var userID int64
+		var role string
+		if err := rows.Scan(&userID, &role); err != nil {
+			return nil, err
+		}
+		rolesByUserID[userID] = role
+	}
+	return rolesByUserID, rows.Err()
+}
+
 func (s *Server) hydrateConversation(ctx context.Context, item *conversationResponse, viewerID int64) error {
 	memberIDs, err := s.conversationMemberIDs(ctx, item.ID)
 	if err != nil {
@@ -483,10 +510,17 @@ func (s *Server) hydrateConversation(ctx context.Context, item *conversationResp
 	if err != nil {
 		return err
 	}
+	rolesByUserID, err := s.conversationMemberRoles(ctx, item.ID)
+	if err != nil {
+		return err
+	}
 
 	item.Members = make([]userResponse, 0, len(memberIDs))
 	for _, memberID := range memberIDs {
 		if user, exists := usersByID[memberID]; exists {
+			if role, exists := rolesByUserID[memberID]; exists {
+				user.Role = &role
+			}
 			item.Members = append(item.Members, user)
 		}
 	}
@@ -617,6 +651,7 @@ func (s *Server) markMessageDeliveredForRecipients(ctx context.Context, messageI
 		MessageIDs:     []int64{messageID},
 		Messages:       []messageReceiptItem{item},
 		DeliveredAt:    deliveredAt,
+		RecipientIDs:   recipientIDs,
 	}, nil
 }
 
@@ -628,7 +663,11 @@ func (s *Server) hydrateMessageReceiptCounts(ctx context.Context, message *messa
 	message.RecipientCount = item.RecipientCount
 	message.DeliveredCount = item.DeliveredCount
 	message.ReadCount = item.ReadCount
-	message.Receipts = []messageReceiptItem{item}
+	receipts, err := s.messageReceiptDetails(ctx, message.ID)
+	if err != nil {
+		return err
+	}
+	message.Receipts = receipts
 	return nil
 }
 
@@ -665,6 +704,50 @@ func (s *Server) messageReceiptSnapshot(ctx context.Context, messageID int64) (m
 	item.DeliveredAt = nullableString(deliveredAt)
 	item.ReadAt = nullableString(readAt)
 	return item, nil
+}
+
+func (s *Server) messageReceiptDetails(ctx context.Context, messageID int64) ([]messageReceiptItem, error) {
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT message_id, user_id, delivered_at::text, read_at::text
+		 FROM message_receipts
+		 WHERE message_id = $1
+		 ORDER BY user_id`,
+		messageID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	receipts := make([]messageReceiptItem, 0)
+	userIDs := make([]int64, 0)
+	for rows.Next() {
+		var item messageReceiptItem
+		var deliveredAt, readAt sql.NullString
+		if err := rows.Scan(&item.MessageID, &item.UserID, &deliveredAt, &readAt); err != nil {
+			return nil, err
+		}
+		item.DeliveredAt = nullableString(deliveredAt)
+		item.ReadAt = nullableString(readAt)
+		receipts = append(receipts, item)
+		userIDs = append(userIDs, item.UserID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	usersByID, err := s.getUserResponsesByID(ctx, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	for index := range receipts {
+		if user, exists := usersByID[receipts[index].UserID]; exists {
+			receipts[index].User = &user
+		}
+	}
+
+	return receipts, nil
 }
 
 func (s *Server) syncMessageAggregateReceipts(ctx context.Context, item messageReceiptItem) error {

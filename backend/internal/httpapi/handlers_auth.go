@@ -43,6 +43,7 @@ type userResponse struct {
 	AccountStatus     string    `json:"account_status"`
 	DisplayName       string    `json:"display_name"`
 	Username          string    `json:"username"`
+	Role              *string   `json:"role,omitempty"`
 	Bio               *string   `json:"bio,omitempty"`
 	Location          *string   `json:"location,omitempty"`
 	AvatarURL         *string   `json:"avatar_url,omitempty"`

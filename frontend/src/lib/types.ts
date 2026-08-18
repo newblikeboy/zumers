@@ -5,6 +5,7 @@ export type User = {
   account_status: string
   display_name: string
   username: string
+  role?: 'owner' | 'member'
   bio?: string
   location?: string
   avatar_url?: string
@@ -158,7 +159,19 @@ export type Message = {
   recipient_count: number
   delivered_count: number
   read_count: number
+  receipts?: MessageReceipt[]
   created_at: string
+}
+
+export type MessageReceipt = {
+  message_id: number
+  user_id?: number
+  user?: User
+  delivered_at?: string
+  read_at?: string
+  recipient_count: number
+  delivered_count: number
+  read_count: number
 }
 
 export type Conversation = {

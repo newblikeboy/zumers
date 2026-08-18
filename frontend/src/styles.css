@@ -3335,6 +3335,7 @@ body {
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: auto;
   overflow: hidden;
+  position: relative;
 }
 
 .message-header {
@@ -3408,6 +3409,14 @@ body {
   white-space: pre-wrap;
 }
 
+.message-sender {
+  color: #12756f;
+  display: block;
+  font-size: 0.76rem;
+  line-height: 1.15;
+  margin-bottom: 1px;
+}
+
 .message-media {
   border-radius: 14px;
   max-width: min(320px, 100%);
@@ -3452,14 +3461,226 @@ body {
 
 .message-receipt {
   align-items: center;
+  background: transparent;
+  border: 0;
   color: currentColor;
   display: inline-flex;
+  font: inherit;
+  gap: 2px;
   height: 14px;
   line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+
+.message-receipt span {
+  font-size: 0.64rem;
+  font-weight: 850;
 }
 
 .message-receipt.read {
   color: #53bdeb;
+}
+
+.chat-details-panel {
+  background: #fff;
+  border-left: 1px solid var(--line-soft);
+  bottom: 0;
+  box-shadow: -16px 0 34px rgba(15, 23, 42, 0.16);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  max-width: 100%;
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: min(380px, 92%);
+  z-index: 12;
+}
+
+.chat-details-panel header {
+  align-items: center;
+  background: #f0f2f5;
+  border-bottom: 1px solid #d9dee2;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 60px;
+  padding: 10px 12px;
+}
+
+.chat-details-panel header span,
+.chat-details-panel header h3 {
+  display: block;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-details-panel header span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.chat-details-panel header h3 {
+  color: #111b21;
+  font-size: 1.02rem;
+}
+
+.chat-details-body {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.group-profile {
+  align-items: center;
+  display: grid;
+  justify-items: center;
+  padding: 10px 4px 16px;
+  text-align: center;
+}
+
+.group-profile .avatar,
+.group-profile .group-avatar {
+  height: 72px;
+  margin-bottom: 10px;
+  width: 72px;
+}
+
+.group-profile h3 {
+  font-size: 1.18rem;
+  margin: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.group-profile span {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.details-section {
+  border-top: 1px solid var(--line-soft);
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.details-section-heading {
+  align-items: center;
+  color: #111b21;
+  display: flex;
+  justify-content: space-between;
+}
+
+.details-section-heading span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.member-list {
+  display: grid;
+  gap: 2px;
+}
+
+.member-row {
+  align-items: center;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 54px;
+  padding: 6px;
+}
+
+.member-row:hover {
+  background: var(--chip);
+}
+
+.member-row .avatar {
+  height: 40px;
+  width: 40px;
+}
+
+.member-row span,
+.member-row strong,
+.member-row small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-row small {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.member-row em {
+  align-items: center;
+  background: #e7fce3;
+  border-radius: 999px;
+  color: #1f7a38;
+  display: inline-flex;
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 850;
+  gap: 4px;
+  padding: 4px 7px;
+}
+
+.message-info-card {
+  background: #d9fdd3;
+  border-radius: 8px;
+  box-shadow: 0 1px 0 rgba(11, 20, 26, 0.12);
+  color: #111b21;
+  display: grid;
+  gap: 6px;
+  justify-self: end;
+  max-width: 92%;
+  min-width: 140px;
+  padding: 9px 10px 7px;
+}
+
+.message-info-card span {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.message-info-card small {
+  color: #667781;
+  justify-self: end;
+}
+
+.message-status-summary {
+  display: grid;
+  gap: 6px;
+}
+
+.message-status-summary span {
+  align-items: center;
+  color: #667781;
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 850;
+  gap: 6px;
+}
+
+.message-status-summary .read {
+  color: #53bdeb;
+}
+
+.details-empty {
+  color: var(--muted);
+  font-size: 0.82rem;
+  padding: 8px 6px;
 }
 
 .message.mine small {
