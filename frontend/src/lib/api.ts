@@ -3,6 +3,8 @@ import type {
   BusinessAccount,
   BusinessAuthResponse,
   BusinessDashboard,
+  BusinessTaxonomy,
+  BusinessVenueExperience,
   CloudinarySignature,
   Conversation,
   Comment,
@@ -287,7 +289,6 @@ export const businessApi = {
     password: string
     business_name: string
     business_category: string
-    location: string
     contact_phone?: string
   }) =>
     businessApiRequest<BusinessAuthResponse>('/business/signup', {
@@ -303,7 +304,7 @@ export const businessApi = {
 
   me: () => businessApiRequest<BusinessAccount>('/business/me'),
 
-  update: (body: Partial<BusinessAccount>) =>
+  update: (body: Partial<BusinessAccount> & { venue_experiences?: BusinessVenueExperience[] }) =>
     businessApiRequest<BusinessAccount>('/business/me', {
       method: 'PATCH',
       body: JSON.stringify(body),
@@ -320,6 +321,8 @@ export const businessApi = {
   logout: () => {
     localStorage.removeItem(businessAccessTokenKey)
   },
+
+  taxonomy: () => businessApiRequest<BusinessTaxonomy>('/business/taxonomy'),
 }
 
 async function refreshSession(refreshToken: string) {

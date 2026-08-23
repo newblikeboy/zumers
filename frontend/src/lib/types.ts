@@ -35,29 +35,120 @@ export type BusinessAccount = {
   address?: string
   city?: string
   area?: string
+  postal_code?: string
+  google_place_id?: string
+  state?: string
+  country?: string
+  district?: string
+  landmark?: string
   latitude?: number
   longitude?: number
+  location_accuracy_meters?: number
+  location_verified: boolean
   service_radius_km?: number
   price_range?: 'budget' | 'moderate' | 'premium' | 'luxury'
   mood_tags?: string
   service_tags?: string
   best_for?: string
+  facility_tags?: string
   website_url?: string
   whatsapp_number?: string
   contact_phone?: string
   description?: string
   offerings?: string
   opening_hours?: string
+  opening_hours_schedule: BusinessOpeningHour[]
+  open_now: boolean
+  primary_venue?: BusinessVenue
   onboarding_status: 'draft' | 'submitted' | 'approved'
   account_status: 'active' | 'disabled'
   created_at: string
   updated_at: string
 }
 
+export type BusinessVenue = {
+  id: number
+  business_id: number
+  venue_name: string
+  is_primary: boolean
+  location: string
+  address?: string
+  city?: string
+  area?: string
+  postal_code?: string
+  google_place_id?: string
+  state?: string
+  country?: string
+  district?: string
+  landmark?: string
+  latitude?: number
+  longitude?: number
+  location_accuracy_meters?: number
+  location_verified: boolean
+  service_radius_km?: number
+  opening_hours?: string
+  status: 'active' | 'inactive'
+  experiences: BusinessVenueExperience[]
+}
+
+export type BusinessVenueExperience = {
+  id?: number
+  venue_id?: number
+  experience_name: string
+  description?: string
+  category?: string
+  tags?: string
+  starting_price?: number
+  average_price_per_person?: number
+  typical_duration_minutes?: number
+  min_group_size?: number
+  ideal_group_size?: number
+  max_group_size?: number
+  indoor_outdoor?: 'indoor' | 'outdoor' | 'both'
+  booking_required: boolean
+  walk_in_available: boolean
+  status?: 'draft' | 'active' | 'inactive'
+  display_order: number
+}
+
+export type BusinessOpeningHour = {
+  weekday: number
+  interval_order: number
+  is_closed: boolean
+  opens_at?: string
+  closes_at?: string
+}
+
 export type BusinessAuthResponse = {
   access_token: string
   access_token_expires_at: string
   business: BusinessAccount
+}
+
+export type BusinessTaxonomySubcategory = {
+  id: number
+  slug: string
+  name: string
+}
+
+export type BusinessTaxonomyCategory = {
+  id: number
+  slug: string
+  name: string
+  description?: string
+  subcategories: BusinessTaxonomySubcategory[]
+}
+
+export type BusinessTaxonomyTag = {
+  id: number
+  type: 'mood' | 'service' | 'audience' | 'facility'
+  slug: string
+  name: string
+}
+
+export type BusinessTaxonomy = {
+  categories: BusinessTaxonomyCategory[]
+  tags: BusinessTaxonomyTag[]
 }
 
 export type BusinessBookingRequest = {

@@ -51,6 +51,7 @@ Refresh/logout body:
 | --- | --- | --- | --- |
 | POST | `/business/signup` | No | Create a business account |
 | POST | `/business/login` | No | Log in to a business account |
+| GET | `/business/taxonomy` | No | Return controlled business categories, subcategories, and discovery tags |
 | GET | `/business/me` | Business | Return current business profile |
 | PATCH | `/business/me` | Business | Update business profile and onboarding data |
 | GET | `/business/dashboard` | Business | Load business dashboard controls and booking requests |
@@ -67,17 +68,62 @@ Business profile updates can include discovery fields used later by the user-fac
   "address": "Full street address",
   "city": "New Delhi",
   "area": "Rajouri Garden",
+  "postal_code": "110027",
+  "google_place_id": "ChIJ...",
+  "state": "Delhi",
+  "country": "India",
+  "district": "West Delhi",
+  "landmark": "Near metro station",
   "latitude": 28.6467,
   "longitude": 77.1200,
+  "location_accuracy_meters": 18.5,
   "service_radius_km": 5,
   "price_range": "moderate",
   "mood_tags": "hungry, friends hangout, family dinner",
   "service_tags": "north indian, buffet, live music",
   "best_for": "friends, family, office groups",
+  "facility_tags": "parking, washroom, outdoor seating",
+  "opening_hours_schedule": [
+    {
+      "weekday": 0,
+      "interval_order": 1,
+      "is_closed": false,
+      "opens_at": "11:00",
+      "closes_at": "23:00"
+    },
+    {
+      "weekday": 1,
+      "interval_order": 1,
+      "is_closed": true
+    }
+  ],
+  "venue_experiences": [
+    {
+      "experience_name": "Bowling",
+      "description": "60-minute lane booking for friends and groups.",
+      "category": "Gaming",
+      "tags": "fun, friends hangout",
+      "starting_price": 350,
+      "average_price_per_person": 500,
+      "typical_duration_minutes": 60,
+      "min_group_size": 2,
+      "ideal_group_size": 4,
+      "max_group_size": 8,
+      "indoor_outdoor": "indoor",
+      "booking_required": true,
+      "walk_in_available": true,
+      "status": "active",
+      "display_order": 1
+    }
+  ],
   "website_url": "https://example.com/menu",
   "whatsapp_number": "+919999999999"
 }
 ```
+
+Business responses also include `open_now`, derived from `opening_hours_schedule`.
+Business responses also include `primary_venue`, a synchronized venue record created from the current single-location business profile.
+`primary_venue.experiences` returns the structured activities users can do at that venue.
 
 `price_range` must be one of `budget`, `moderate`, `premium`, or `luxury`. Tag fields are comma-separated and normalized by the API.
 

@@ -9,6 +9,7 @@ import {
   Clock3,
   ClipboardList,
   ForkKnife,
+  LocateFixed,
   LogOut,
   MapPin,
   Menu,
@@ -28,13 +29,150 @@ import { ErrorBanner } from '../components/ErrorBanner'
 import businessHero from '../assets/zumers-business-hero.png'
 import { businessApi } from '../lib/api'
 import { businessPath } from '../lib/businessRoutes'
-import type { BusinessAccount, BusinessDashboard } from '../lib/types'
+import type {
+  BusinessAccount,
+  BusinessDashboard,
+  BusinessOpeningHour,
+  BusinessTaxonomyCategory,
+  BusinessTaxonomyTag,
+  BusinessVenueExperience,
+} from '../lib/types'
+
+type BusinessLocationValue = {
+  location: string
+  address: string
+  city: string
+  area: string
+  postal_code: string
+  google_place_id: string
+  state: string
+  country: string
+  district: string
+  landmark: string
+  latitude: string
+  longitude: string
+  location_accuracy_meters: string
+}
+
+type GoogleGeocodeAddressComponent = {
+  long_name: string
+  short_name: string
+  types: string[]
+}
+
+type GoogleGeocodeResult = {
+  formatted_address?: string
+  address_components?: GoogleGeocodeAddressComponent[]
+  place_id?: string
+}
+
+type GoogleMapsGeocoder = {
+  geocode: (
+    request: { location: { lat: number; lng: number } },
+    callback: (results: GoogleGeocodeResult[] | null, status: string) => void,
+  ) => void
+}
+
+type GoogleMapsWindow = {
+  maps: {
+    Geocoder: new () => GoogleMapsGeocoder
+    GeocoderStatus: {
+      OK: string
+    }
+  }
+}
+
+declare global {
+  interface Window {
+    google?: GoogleMapsWindow
+  }
+}
+
+let googleMapsLoader: Promise<GoogleMapsWindow> | null = null
 
 const businessTypes = [
   { icon: Utensils, title: 'Street food', text: 'Food carts, local stalls, snacks, and late-night favorites.' },
   { icon: ForkKnife, title: 'Restaurants', text: 'Cafes, family restaurants, premium dining, and hidden gems.' },
   { icon: Bus, title: 'Travel', text: 'Tours, buses, stays, local rides, and weekend trip operators.' },
   { icon: CalendarDays, title: 'Events', text: 'Workshops, shows, meetups, pop-ups, and seasonal experiences.' },
+]
+
+const fallbackBusinessCategories: BusinessTaxonomyCategory[] = [
+  {
+    id: 1,
+    slug: 'street-food',
+    name: 'Street food',
+    subcategories: [
+      { id: 1, slug: 'chaat', name: 'Chaat' },
+      { id: 2, slug: 'momos', name: 'Momos' },
+      { id: 3, slug: 'street-food-market', name: 'Street Food Market' },
+    ],
+  },
+  {
+    id: 2,
+    slug: 'restaurant-or-cafe',
+    name: 'Restaurant or cafe',
+    subcategories: [
+      { id: 4, slug: 'restaurant', name: 'Restaurant' },
+      { id: 5, slug: 'cafe', name: 'Cafe' },
+      { id: 6, slug: 'rooftop-cafe', name: 'Rooftop Cafe' },
+    ],
+  },
+  {
+    id: 3,
+    slug: 'fun-and-entertainment',
+    name: 'Fun and entertainment',
+    subcategories: [
+      { id: 7, slug: 'bowling', name: 'Bowling' },
+      { id: 8, slug: 'gaming-zone', name: 'Gaming Zone' },
+      { id: 9, slug: 'vr-gaming', name: 'VR Gaming' },
+    ],
+  },
+  {
+    id: 4,
+    slug: 'travel-or-transport',
+    name: 'Travel or transport',
+    subcategories: [
+      { id: 10, slug: 'weekend-trip', name: 'Weekend Trip' },
+      { id: 11, slug: 'tour-operator', name: 'Tour Operator' },
+    ],
+  },
+  {
+    id: 5,
+    slug: 'culture-and-events',
+    name: 'Culture and events',
+    subcategories: [
+      { id: 12, slug: 'concert', name: 'Concert' },
+      { id: 13, slug: 'workshop', name: 'Workshop' },
+    ],
+  },
+  {
+    id: 6,
+    slug: 'other-local-service',
+    name: 'Other local service',
+    subcategories: [],
+  },
+]
+
+const fallbackBusinessTags: BusinessTaxonomyTag[] = [
+  { id: 1, type: 'mood', slug: 'chill', name: 'Chill' },
+  { id: 2, type: 'mood', slug: 'fun', name: 'Fun' },
+  { id: 3, type: 'mood', slug: 'romantic', name: 'Romantic' },
+  { id: 4, type: 'mood', slug: 'peaceful', name: 'Peaceful' },
+  { id: 5, type: 'mood', slug: 'late-night', name: 'Late Night' },
+  { id: 6, type: 'service', slug: 'breakfast', name: 'Breakfast' },
+  { id: 7, type: 'service', slug: 'dinner', name: 'Dinner' },
+  { id: 8, type: 'service', slug: 'coffee', name: 'Coffee' },
+  { id: 9, type: 'service', slug: 'live-music', name: 'Live Music' },
+  { id: 10, type: 'service', slug: 'quick-bite', name: 'Quick Bite' },
+  { id: 11, type: 'audience', slug: 'friends', name: 'Friends' },
+  { id: 12, type: 'audience', slug: 'couples', name: 'Couples' },
+  { id: 13, type: 'audience', slug: 'family', name: 'Family' },
+  { id: 14, type: 'audience', slug: 'large-groups', name: 'Large Groups' },
+  { id: 15, type: 'facility', slug: 'parking', name: 'Parking' },
+  { id: 16, type: 'facility', slug: 'washroom', name: 'Washroom' },
+  { id: 17, type: 'facility', slug: 'air-conditioning', name: 'Air Conditioning' },
+  { id: 18, type: 'facility', slug: 'outdoor-seating', name: 'Outdoor Seating' },
 ]
 
 const onboardingSteps = [
@@ -74,6 +212,7 @@ const onboardingBusinesses = [
 type BusinessAuthMode = 'signup' | 'login'
 type BusinessPageMode = 'landing' | 'dashboard'
 type BusinessDashboardSection = 'overview' | 'today' | 'offers' | 'bookings' | 'profile'
+type BusinessOnboardingStep = 'identity' | 'location' | 'contact' | 'discovery' | 'hours' | 'preview'
 
 const businessDashboardSections = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
@@ -82,6 +221,25 @@ const businessDashboardSections = [
   { id: 'bookings', label: 'Bookings', icon: Ticket },
   { id: 'profile', label: 'Business profile', icon: Building2 },
 ] satisfies Array<{ id: BusinessDashboardSection; label: string; icon: typeof BarChart3 }>
+
+const businessOnboardingSteps = [
+  { id: 'identity', label: 'Identity' },
+  { id: 'location', label: 'Location' },
+  { id: 'contact', label: 'Contact' },
+  { id: 'discovery', label: 'Discovery' },
+  { id: 'hours', label: 'Hours' },
+  { id: 'preview', label: 'Preview' },
+] satisfies Array<{ id: BusinessOnboardingStep; label: string }>
+
+const businessWeekdays = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+]
 
 type BusinessPageProps = {
   mode: BusinessPageMode
@@ -98,6 +256,10 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
   const [checkedSession, setCheckedSession] = useState(false)
   const [dashboardSection, setDashboardSection] = useState<BusinessDashboardSection>('overview')
   const [dashboardMenuOpen, setDashboardMenuOpen] = useState(false)
+  const [onboardingStep, setOnboardingStep] = useState<BusinessOnboardingStep>('identity')
+  const [businessCategories, setBusinessCategories] =
+    useState<BusinessTaxonomyCategory[]>(fallbackBusinessCategories)
+  const [businessTags, setBusinessTags] = useState<BusinessTaxonomyTag[]>(fallbackBusinessTags)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -109,6 +271,19 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
       .then(setBusiness)
       .catch(() => undefined)
       .finally(() => setCheckedSession(true))
+  }, [])
+
+  useEffect(() => {
+    businessApi.taxonomy()
+      .then((taxonomy) => {
+        if (taxonomy.categories.length) {
+          setBusinessCategories(taxonomy.categories)
+        }
+        if (taxonomy.tags.length) {
+          setBusinessTags(taxonomy.tags)
+        }
+      })
+      .catch(() => undefined)
   }, [])
 
   useEffect(() => {
@@ -133,7 +308,6 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
       const response = await businessApi.signup({
         business_name: String(form.get('business_name')),
         business_category: String(form.get('business_category')),
-        location: String(form.get('location')),
         contact_phone: String(form.get('contact_phone')),
         email: String(form.get('email')),
         password: String(form.get('password')),
@@ -169,10 +343,13 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
 
   async function saveOnboarding(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setBusy('onboarding')
+    const onboardingStatus = onboardingSubmitStatus(event)
+    setBusy(`onboarding-${onboardingStatus}`)
     setError(null)
     setSuccess(null)
     const form = new FormData(event.currentTarget)
+    const openingHoursSchedule = businessOpeningHoursFromForm(form)
+    const venueExperiences = businessVenueExperiencesFromForm(form)
     try {
       const updated = await businessApi.update({
         business_name: String(form.get('business_name')),
@@ -182,23 +359,33 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
         address: String(form.get('address')),
         city: String(form.get('city')),
         area: String(form.get('area')),
+        postal_code: String(form.get('postal_code')),
+        google_place_id: String(form.get('google_place_id')),
+        state: String(form.get('state')),
+        country: String(form.get('country')),
+        district: String(form.get('district')),
+        landmark: String(form.get('landmark')),
         latitude: optionalNumber(form.get('latitude')),
         longitude: optionalNumber(form.get('longitude')),
+        location_accuracy_meters: optionalNumber(form.get('location_accuracy_meters')),
         service_radius_km: optionalNumber(form.get('service_radius_km')),
         price_range: optionalPriceRange(form.get('price_range')),
         mood_tags: String(form.get('mood_tags')),
         service_tags: String(form.get('service_tags')),
         best_for: String(form.get('best_for')),
+        facility_tags: String(form.get('facility_tags')),
         website_url: String(form.get('website_url')),
         whatsapp_number: String(form.get('whatsapp_number')),
         contact_phone: String(form.get('contact_phone')),
         description: String(form.get('description')),
         offerings: String(form.get('offerings')),
-        opening_hours: String(form.get('opening_hours')),
-        onboarding_status: 'submitted',
+        opening_hours: formatBusinessOpeningHours(openingHoursSchedule),
+        opening_hours_schedule: openingHoursSchedule,
+        venue_experiences: venueExperiences,
+        onboarding_status: onboardingStatus,
       })
       setBusiness(updated)
-      setSuccess('Business onboarding submitted.')
+      setSuccess(onboardingStatus === 'submitted' ? 'Business onboarding submitted.' : 'Business draft saved.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save onboarding')
     } finally {
@@ -290,6 +477,17 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
       { icon: Ticket, label: 'Bookings', value: dashboard?.bookings.length ?? 0, hint: 'Pending' },
       { icon: BadgeCheck, label: 'Saves', value: dashboard?.saves ?? 0, hint: 'This week' },
     ]
+    const activeOnboardingIndex = businessOnboardingSteps.findIndex((step) => step.id === onboardingStep)
+    const onboardingCompletion = businessProfileCompleteness(business)
+    const onboardingStepClass = (step: BusinessOnboardingStep) =>
+      onboardingStep === step ? 'business-onboarding-step active' : 'business-onboarding-step'
+    const goToOnboardingStep = (direction: -1 | 1) => {
+      const nextIndex = Math.min(
+        Math.max(activeOnboardingIndex + direction, 0),
+        businessOnboardingSteps.length - 1,
+      )
+      setOnboardingStep(businessOnboardingSteps[nextIndex].id)
+    }
 
     return (
       <main className={dashboardMenuOpen ? 'business-dashboard-shell menu-open' : 'business-dashboard-shell'}>
@@ -513,176 +711,224 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
                   <h2>Business details</h2>
                 </div>
               </div>
+              <div className="business-onboarding-progress">
+                <div>
+                  <span>Profile completeness</span>
+                  <strong>{onboardingCompletion}%</strong>
+                </div>
+                <progress value={onboardingCompletion} max={100} />
+              </div>
+              <nav className="business-onboarding-steps" aria-label="Business onboarding steps">
+                {businessOnboardingSteps.map((step, index) => (
+                  <button
+                    key={step.id}
+                    className={step.id === onboardingStep ? 'active' : ''}
+                    type="button"
+                    onClick={() => setOnboardingStep(step.id)}
+                  >
+                    <span>{index + 1}</span>
+                    {step.label}
+                  </button>
+                ))}
+              </nav>
               <form className="business-form-preview business-onboarding-form" onSubmit={saveOnboarding}>
-              <div className="business-form-section-title">
-                <h3>Business identity</h3>
-                <p>Core details users and the discovery engine use to understand the business.</p>
-              </div>
-              <label>
-                Business name
-                <input name="business_name" defaultValue={business.business_name} required />
-              </label>
-              <label>
-                Category
-                <input name="business_category" defaultValue={business.business_category} required />
-              </label>
-              <label>
-                Subcategory
-                <input
-                  name="business_subcategory"
-                  defaultValue={business.business_subcategory ?? ''}
-                  placeholder="Example: North Indian, momo stall, weekend tours"
-                />
-              </label>
-              <label>
-                Location summary
-                <input name="location" defaultValue={business.location} required />
-              </label>
-              <div className="business-form-section-title">
-                <h3>Location intelligence</h3>
-                <p>Structured place data for nearby search, maps, and future directions tracking.</p>
-              </div>
-              <label>
-                Address
-                <textarea
-                  name="address"
-                  defaultValue={business.address ?? ''}
-                  placeholder="Full address users can follow before opening maps."
-                />
-              </label>
-              <label>
-                City
-                <input name="city" defaultValue={business.city ?? ''} placeholder="Example: New Delhi" />
-              </label>
-              <label>
-                Area
-                <input name="area" defaultValue={business.area ?? ''} placeholder="Example: Rajouri Garden" />
-              </label>
-              <label>
-                Latitude
-                <input
-                  name="latitude"
-                  defaultValue={business.latitude ?? ''}
-                  inputMode="decimal"
-                  placeholder="Example: 28.6467"
-                  step="any"
-                  type="number"
-                />
-              </label>
-              <label>
-                Longitude
-                <input
-                  name="longitude"
-                  defaultValue={business.longitude ?? ''}
-                  inputMode="decimal"
-                  placeholder="Example: 77.1200"
-                  step="any"
-                  type="number"
-                />
-              </label>
-              <label>
-                Service radius
-                <input
-                  name="service_radius_km"
-                  defaultValue={business.service_radius_km ?? ''}
-                  inputMode="decimal"
-                  min="0"
-                  placeholder="Kilometers"
-                  step="0.1"
-                  type="number"
-                />
-              </label>
-              <div className="business-form-section-title">
-                <h3>Pricing and contact</h3>
-                <p>How users can evaluate cost and reach the business from a search result.</p>
-              </div>
-              <label>
-                Price range
-                <select name="price_range" defaultValue={business.price_range ?? ''}>
-                  <option value="">Select price range</option>
-                  <option value="budget">Budget</option>
-                  <option value="moderate">Moderate</option>
-                  <option value="premium">Premium</option>
-                  <option value="luxury">Luxury</option>
-                </select>
-              </label>
-              <label>
-                Contact phone
-                <input name="contact_phone" defaultValue={business.contact_phone ?? ''} />
-              </label>
-              <label>
-                WhatsApp number
-                <input
-                  name="whatsapp_number"
-                  defaultValue={business.whatsapp_number ?? ''}
-                  placeholder="Number for customer enquiries"
-                />
-              </label>
-              <label>
-                Website or menu link
-                <input
-                  name="website_url"
-                  defaultValue={business.website_url ?? ''}
-                  placeholder="https://..."
-                  type="url"
-                />
-              </label>
-              <div className="business-form-section-title">
-                <h3>Discovery content</h3>
-                <p>Offers, mood tags, and best-for signals that connect the business to user intent.</p>
-              </div>
-              <label>
-                Business description
-                <textarea
-                  name="description"
-                  defaultValue={business.description ?? ''}
-                  placeholder="Tell users what makes this place worth visiting."
-                />
-              </label>
-              <label>
-                Menu, packages, events, or services
-                <textarea
-                  name="offerings"
-                  defaultValue={business.offerings ?? ''}
-                  placeholder="Popular dishes, travel packages, event details, offers, or services."
-                />
-              </label>
-              <label>
-                Mood tags
-                <textarea
-                  name="mood_tags"
-                  defaultValue={business.mood_tags ?? ''}
-                  placeholder="hungry, date plan, friends hangout, family dinner, late night"
-                />
-              </label>
-              <label>
-                Service tags
-                <textarea
-                  name="service_tags"
-                  defaultValue={business.service_tags ?? ''}
-                  placeholder="north indian, momos, buffet, live music, weekend trip"
-                />
-              </label>
-              <label>
-                Best for
-                <textarea
-                  name="best_for"
-                  defaultValue={business.best_for ?? ''}
-                  placeholder="friends, family, couples, office groups, solo visitors"
-                />
-              </label>
-              <label>
-                Opening hours
-                <input
-                  name="opening_hours"
-                  defaultValue={business.opening_hours ?? ''}
-                  placeholder="Example: Mon-Sun, 11 AM - 11 PM"
-                />
-              </label>
-              <button className="business-primary" disabled={busy === 'onboarding'}>
-                <Save size={18} />
-                {busy === 'onboarding' ? 'Saving onboarding' : 'Submit onboarding'}
-              </button>
+                <div className={onboardingStepClass('identity')}>
+                  <div className="business-form-section-title">
+                    <h3>Business identity</h3>
+                    <p>Core details users and the discovery engine use to understand the business.</p>
+                  </div>
+                  <label>
+                    Business name
+                    <input name="business_name" defaultValue={business.business_name} required />
+                  </label>
+                  <BusinessCategoryFields
+                    categories={businessCategories}
+                    initialCategory={business.business_category}
+                    initialSubcategory={business.business_subcategory ?? ''}
+                  />
+                </div>
+                <div className={onboardingStepClass('location')}>
+                  <div className="business-form-section-title">
+                    <h3>Location intelligence</h3>
+                    <p>Structured place data for nearby search, maps, and future directions tracking.</p>
+                  </div>
+                  <label>
+                    Location summary
+                    <BusinessCurrentLocationPicker
+                      initialValue={businessLocationValue(business)}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Service radius
+                    <input
+                      name="service_radius_km"
+                      defaultValue={business.service_radius_km ?? ''}
+                      inputMode="decimal"
+                      min="0"
+                      placeholder="Kilometers"
+                      step="0.1"
+                      type="number"
+                    />
+                  </label>
+                </div>
+                <div className={onboardingStepClass('contact')}>
+                  <div className="business-form-section-title">
+                    <h3>Pricing and contact</h3>
+                    <p>How users can evaluate cost and reach the business from a search result.</p>
+                  </div>
+                  <label>
+                    Price range
+                    <select name="price_range" defaultValue={business.price_range ?? ''}>
+                      <option value="">Select price range</option>
+                      <option value="budget">Budget</option>
+                      <option value="moderate">Moderate</option>
+                      <option value="premium">Premium</option>
+                      <option value="luxury">Luxury</option>
+                    </select>
+                  </label>
+                  <label>
+                    Contact phone
+                    <input name="contact_phone" defaultValue={business.contact_phone ?? ''} />
+                  </label>
+                  <label>
+                    WhatsApp number
+                    <input
+                      name="whatsapp_number"
+                      defaultValue={business.whatsapp_number ?? ''}
+                      placeholder="Number for customer enquiries"
+                    />
+                  </label>
+                  <label>
+                    Website or menu link
+                    <input
+                      name="website_url"
+                      defaultValue={business.website_url ?? ''}
+                      placeholder="https://..."
+                      type="url"
+                    />
+                  </label>
+                </div>
+                <div className={onboardingStepClass('discovery')}>
+                  <div className="business-form-section-title">
+                    <h3>Discovery content</h3>
+                    <p>Structured signals that connect the business to user intent.</p>
+                  </div>
+                  <label>
+                    Business description
+                    <textarea
+                      name="description"
+                      defaultValue={business.description ?? ''}
+                      placeholder="Tell users what makes this place worth visiting."
+                    />
+                  </label>
+                  <label>
+                    Menu, packages, events, or services
+                    <textarea
+                      name="offerings"
+                      defaultValue={business.offerings ?? ''}
+                      placeholder="Popular dishes, travel packages, event details, offers, or services."
+                    />
+                  </label>
+                  <BusinessTagMultiSelect
+                    label="Mood tags"
+                    name="mood_tags"
+                    options={businessTags.filter((tag) => tag.type === 'mood')}
+                    value={business.mood_tags ?? ''}
+                  />
+                  <BusinessTagMultiSelect
+                    label="Service tags"
+                    name="service_tags"
+                    options={businessTags.filter((tag) => tag.type === 'service')}
+                    value={business.service_tags ?? ''}
+                  />
+                  <BusinessTagMultiSelect
+                    label="Best for"
+                    name="best_for"
+                    options={businessTags.filter((tag) => tag.type === 'audience')}
+                    value={business.best_for ?? ''}
+                  />
+                  <BusinessTagMultiSelect
+                    label="Facilities"
+                    name="facility_tags"
+                    options={businessTags.filter((tag) => tag.type === 'facility')}
+                    value={business.facility_tags ?? ''}
+                  />
+                  <BusinessExperienceEditor experiences={business.primary_venue?.experiences ?? []} />
+                </div>
+                <div className={onboardingStepClass('hours')}>
+                  <div className="business-form-section-title">
+                    <h3>Opening hours</h3>
+                    <p>Day-wise timings support open-now and late-night discovery.</p>
+                  </div>
+                  <BusinessOpeningHoursEditor schedule={business.opening_hours_schedule} />
+                </div>
+                <div className={onboardingStepClass('preview')}>
+                  <div className="business-form-section-title">
+                    <h3>Preview and publish</h3>
+                    <p>Save a draft anytime, or submit when the profile is ready for review.</p>
+                  </div>
+                  <div className="business-onboarding-preview">
+                    <div>
+                      <span>Business</span>
+                      <strong>{business.business_name}</strong>
+                    </div>
+                    <div>
+                      <span>Category</span>
+                      <strong>{business.business_category}</strong>
+                    </div>
+                    <div>
+                      <span>Location</span>
+                      <strong>{business.location}</strong>
+                    </div>
+                    <div>
+                      <span>Status</span>
+                      <strong>{business.onboarding_status}</strong>
+                    </div>
+                    <div>
+                      <span>Open now</span>
+                      <strong>{business.open_now ? 'Open' : 'Closed'}</strong>
+                    </div>
+                  </div>
+                </div>
+                <div className="business-onboarding-actions">
+                  <button
+                    className="business-secondary dark"
+                    disabled={activeOnboardingIndex === 0}
+                    type="button"
+                    onClick={() => goToOnboardingStep(-1)}
+                  >
+                    Back
+                  </button>
+                  <button
+                    className="business-secondary dark"
+                    disabled={activeOnboardingIndex === businessOnboardingSteps.length - 1}
+                    type="button"
+                    onClick={() => goToOnboardingStep(1)}
+                  >
+                    Next
+                  </button>
+                  <button
+                    className="business-secondary dark"
+                    disabled={busy === 'onboarding-draft'}
+                    name="onboarding_status"
+                    type="submit"
+                    value="draft"
+                  >
+                    <Save size={18} />
+                    {busy === 'onboarding-draft' ? 'Saving draft' : 'Save draft'}
+                  </button>
+                  <button
+                    className="business-primary"
+                    disabled={busy === 'onboarding-submitted'}
+                    name="onboarding_status"
+                    type="submit"
+                    value="submitted"
+                  >
+                    <Save size={18} />
+                    {busy === 'onboarding-submitted' ? 'Submitting' : 'Submit onboarding'}
+                  </button>
+                </div>
               </form>
             </section>
           ) : null}
@@ -856,7 +1102,11 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
                 </div>
                 <ErrorBanner message={error} />
                 {authMode === 'signup' ? (
-                  <BusinessSignupForm busy={busy} onSubmit={signup} />
+                  <BusinessSignupForm
+                    busy={busy}
+                    categories={businessCategories}
+                    onSubmit={signup}
+                  />
                 ) : (
                   <BusinessLoginForm busy={busy} onSubmit={login} />
                 )}
@@ -871,9 +1121,11 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
 
 function BusinessSignupForm({
   busy,
+  categories,
   onSubmit,
 }: {
   busy: string | null
+  categories: BusinessTaxonomyCategory[]
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
   return (
@@ -891,21 +1143,7 @@ function BusinessSignupForm({
       </label>
       <label>
         Business category
-        <select name="business_category" defaultValue="" required>
-          <option value="" disabled>Select category</option>
-          <option>Street food</option>
-          <option>Restaurant or cafe</option>
-          <option>Travel or transport</option>
-          <option>Event or experience</option>
-          <option>Other local service</option>
-        </select>
-      </label>
-      <label>
-        Location
-        <span className="business-input-icon">
-          <MapPin size={18} />
-          <input name="location" placeholder="City, area, landmark" required />
-        </span>
+        <BusinessCategorySelect categories={categories} defaultValue="" />
       </label>
       <label>
         Contact phone
@@ -925,6 +1163,665 @@ function BusinessSignupForm({
       </button>
     </form>
   )
+}
+
+function BusinessCategorySelect({
+  categories,
+  defaultValue,
+}: {
+  categories: BusinessTaxonomyCategory[]
+  defaultValue: string
+}) {
+  return (
+    <select name="business_category" defaultValue={defaultValue} required>
+      <option value="" disabled>Select category</option>
+      {categories.map((category) => (
+        <option key={category.slug} value={category.name}>
+          {category.name}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+function BusinessCategoryFields({
+  categories,
+  initialCategory,
+  initialSubcategory,
+}: {
+  categories: BusinessTaxonomyCategory[]
+  initialCategory: string
+  initialSubcategory: string
+}) {
+  const [categoryValue, setCategoryValue] = useState(initialCategory)
+  const [subcategoryValue, setSubcategoryValue] = useState(initialSubcategory)
+  const category = categories.find((item) => item.name === categoryValue)
+  const subcategories = category?.subcategories ?? []
+
+  return (
+    <>
+      <label>
+        Category
+        <select
+          name="business_category"
+          required
+          value={categoryValue}
+          onChange={(event) => {
+            setCategoryValue(event.target.value)
+            setSubcategoryValue('')
+          }}
+        >
+          <option value="" disabled>Select category</option>
+          {categoryValue && !categories.some((item) => item.name === categoryValue) ? (
+            <option value={categoryValue}>{categoryValue}</option>
+          ) : null}
+          {categories.map((categoryItem) => (
+            <option key={categoryItem.slug} value={categoryItem.name}>
+              {categoryItem.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Subcategory
+        <select
+          name="business_subcategory"
+          value={subcategoryValue}
+          onChange={(event) => setSubcategoryValue(event.target.value)}
+        >
+          <option value="">Select subcategory</option>
+          {subcategoryValue && !subcategories.some((item) => item.name === subcategoryValue) ? (
+            <option value={subcategoryValue}>{subcategoryValue}</option>
+          ) : null}
+          {subcategories.map((subcategory) => (
+            <option key={subcategory.slug} value={subcategory.name}>
+              {subcategory.name}
+            </option>
+          ))}
+        </select>
+      </label>
+    </>
+  )
+}
+
+function BusinessTagMultiSelect({
+  label,
+  name,
+  options,
+  value,
+}: {
+  label: string
+  name: string
+  options: BusinessTaxonomyTag[]
+  value: string
+}) {
+  const [selected, setSelected] = useState(() => parseTagList(value))
+  const selectedKeys = new Set(selected.map(normalizeTagValue))
+  const unknownSelected = selected.filter(
+    (item) => !options.some((option) => normalizeTagValue(option.name) === normalizeTagValue(item)),
+  )
+
+  function toggleOption(optionName: string) {
+    const optionKey = normalizeTagValue(optionName)
+    setSelected((current) => {
+      const exists = current.some((item) => normalizeTagValue(item) === optionKey)
+      if (exists) {
+        return current.filter((item) => normalizeTagValue(item) !== optionKey)
+      }
+      return [...current, optionName]
+    })
+  }
+
+  function removeUnknown(tagName: string) {
+    const tagKey = normalizeTagValue(tagName)
+    setSelected((current) => current.filter((item) => normalizeTagValue(item) !== tagKey))
+  }
+
+  return (
+    <fieldset className="business-tag-picker">
+      <legend>{label}</legend>
+      <input name={name} type="hidden" value={selected.join(', ')} />
+      <div className="business-tag-options">
+        {options.map((option) => (
+          <label key={option.slug}>
+            <input
+              checked={selectedKeys.has(normalizeTagValue(option.name))}
+              type="checkbox"
+              onChange={() => toggleOption(option.name)}
+            />
+            <span>{option.name}</span>
+          </label>
+        ))}
+      </div>
+      {unknownSelected.length ? (
+        <div className="business-tag-legacy" aria-label={`${label} legacy selections`}>
+          {unknownSelected.map((tag) => (
+            <button key={tag} type="button" onClick={() => removeUnknown(tag)}>
+              {tag}
+              <X size={13} />
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </fieldset>
+  )
+}
+
+function parseTagList(value: string) {
+  const seen = new Set<string>()
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => {
+      const key = normalizeTagValue(item)
+      if (!key || seen.has(key)) {
+        return false
+      }
+      seen.add(key)
+      return true
+    })
+}
+
+function normalizeTagValue(value: string) {
+  return value.trim().toLowerCase()
+}
+
+function BusinessOpeningHoursEditor({ schedule }: { schedule?: BusinessOpeningHour[] }) {
+  const [closedDays, setClosedDays] = useState(() => {
+    const initial = new Set<number>()
+    for (const item of schedule ?? []) {
+      if (item.is_closed) {
+        initial.add(item.weekday)
+      }
+    }
+    return initial
+  })
+
+  return (
+    <div className="business-hours-editor">
+      {businessWeekdays.map((day, weekday) => {
+        const isClosed = closedDays.has(weekday)
+        return (
+          <fieldset key={day} className={isClosed ? 'business-hours-day closed' : 'business-hours-day'}>
+            <legend>{day}</legend>
+            <label className="business-hours-closed">
+              <input
+                name={`opening_hours_${weekday}_closed`}
+                type="checkbox"
+                checked={isClosed}
+                onChange={(event) => {
+                  setClosedDays((current) => {
+                    const next = new Set(current)
+                    if (event.target.checked) {
+                      next.add(weekday)
+                    } else {
+                      next.delete(weekday)
+                    }
+                    return next
+                  })
+                }}
+              />
+              Closed
+            </label>
+            {[1, 2].map((intervalOrder) => {
+              const interval = schedule?.find(
+                (item) => item.weekday === weekday && item.interval_order === intervalOrder && !item.is_closed,
+              )
+              return (
+                <div key={intervalOrder} className="business-hours-interval">
+                  <span>{intervalOrder === 1 ? 'Main' : 'Second'}</span>
+                  <input
+                    aria-label={`${day} interval ${intervalOrder} opens at`}
+                    defaultValue={interval?.opens_at ?? ''}
+                    disabled={isClosed}
+                    name={`opening_hours_${weekday}_${intervalOrder}_opens_at`}
+                    type="time"
+                  />
+                  <input
+                    aria-label={`${day} interval ${intervalOrder} closes at`}
+                    defaultValue={interval?.closes_at ?? ''}
+                    disabled={isClosed}
+                    name={`opening_hours_${weekday}_${intervalOrder}_closes_at`}
+                    type="time"
+                  />
+                </div>
+              )
+            })}
+          </fieldset>
+        )
+      })}
+    </div>
+  )
+}
+
+function BusinessExperienceEditor({ experiences }: { experiences: BusinessVenueExperience[] }) {
+  const rows = Array.from({ length: Math.max(3, experiences.length) }, (_, index) => experiences[index])
+
+  return (
+    <div className="business-experience-editor">
+      <div className="business-form-section-title">
+        <h3>What can people do here?</h3>
+        <p>Experiences are the main discovery data Zumers will recommend to users.</p>
+      </div>
+      {rows.map((experience, index) => (
+        <fieldset key={experience?.id ?? index} className="business-experience-card">
+          <legend>Experience {index + 1}</legend>
+          <label>
+            Name
+            <input
+              name={`experience_${index}_name`}
+              defaultValue={experience?.experience_name ?? ''}
+              placeholder="Example: Bowling, Rooftop dinner, Momos"
+            />
+          </label>
+          <label>
+            Category
+            <input
+              name={`experience_${index}_category`}
+              defaultValue={experience?.category ?? ''}
+              placeholder="Example: Gaming, Food, Live music"
+            />
+          </label>
+          <label>
+            Description
+            <textarea
+              name={`experience_${index}_description`}
+              defaultValue={experience?.description ?? ''}
+              placeholder="Short details users should know before choosing this."
+            />
+          </label>
+          <label>
+            Tags
+            <input
+              name={`experience_${index}_tags`}
+              defaultValue={experience?.tags ?? ''}
+              placeholder="quick bite, friends hangout, late night"
+            />
+          </label>
+          <label>
+            Starting price
+            <input
+              name={`experience_${index}_starting_price`}
+              defaultValue={experience?.starting_price ?? ''}
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              type="number"
+            />
+          </label>
+          <label>
+            Avg. per person
+            <input
+              name={`experience_${index}_average_price_per_person`}
+              defaultValue={experience?.average_price_per_person ?? ''}
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              type="number"
+            />
+          </label>
+          <label>
+            Duration
+            <input
+              name={`experience_${index}_typical_duration_minutes`}
+              defaultValue={experience?.typical_duration_minutes ?? ''}
+              inputMode="numeric"
+              min="1"
+              placeholder="Minutes"
+              type="number"
+            />
+          </label>
+          <label>
+            Indoor/outdoor
+            <select name={`experience_${index}_indoor_outdoor`} defaultValue={experience?.indoor_outdoor ?? ''}>
+              <option value="">Select</option>
+              <option value="indoor">Indoor</option>
+              <option value="outdoor">Outdoor</option>
+              <option value="both">Both</option>
+            </select>
+          </label>
+          <label>
+            Min group
+            <input
+              name={`experience_${index}_min_group_size`}
+              defaultValue={experience?.min_group_size ?? ''}
+              inputMode="numeric"
+              min="1"
+              type="number"
+            />
+          </label>
+          <label>
+            Ideal group
+            <input
+              name={`experience_${index}_ideal_group_size`}
+              defaultValue={experience?.ideal_group_size ?? ''}
+              inputMode="numeric"
+              min="1"
+              type="number"
+            />
+          </label>
+          <label>
+            Max group
+            <input
+              name={`experience_${index}_max_group_size`}
+              defaultValue={experience?.max_group_size ?? ''}
+              inputMode="numeric"
+              min="1"
+              type="number"
+            />
+          </label>
+          <div className="business-experience-toggles">
+            <label>
+              <input
+                name={`experience_${index}_booking_required`}
+                type="checkbox"
+                defaultChecked={experience?.booking_required ?? false}
+              />
+              Booking required
+            </label>
+            <label>
+              <input
+                name={`experience_${index}_walk_in_available`}
+                type="checkbox"
+                defaultChecked={experience?.walk_in_available ?? true}
+              />
+              Walk-in available
+            </label>
+          </div>
+        </fieldset>
+      ))}
+    </div>
+  )
+}
+
+function BusinessCurrentLocationPicker({
+  initialValue,
+  required = false,
+}: {
+  initialValue?: Partial<BusinessLocationValue>
+  required?: boolean
+}) {
+  const [value, setValue] = useState<BusinessLocationValue>({
+    location: initialValue?.location ?? '',
+    address: initialValue?.address ?? '',
+    city: initialValue?.city ?? '',
+    area: initialValue?.area ?? '',
+    postal_code: initialValue?.postal_code ?? '',
+    google_place_id: initialValue?.google_place_id ?? '',
+    state: initialValue?.state ?? '',
+    country: initialValue?.country ?? '',
+    district: initialValue?.district ?? '',
+    landmark: initialValue?.landmark ?? '',
+    latitude: initialValue?.latitude ?? '',
+    longitude: initialValue?.longitude ?? '',
+    location_accuracy_meters: initialValue?.location_accuracy_meters ?? '',
+  })
+  const [status, setStatus] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  function updateField(field: keyof BusinessLocationValue, fieldValue: string) {
+    setValue((current) => ({
+      ...current,
+      [field]: fieldValue,
+    }))
+  }
+
+  async function useCurrentLocation() {
+    setStatus(null)
+
+    if (!navigator.geolocation) {
+      setStatus('Current location is not supported by this browser.')
+      return
+    }
+
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY
+    if (!apiKey) {
+      setStatus('Google Maps API key is missing.')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const position = await getBrowserPosition()
+      const latitude = position.coords.latitude
+      const longitude = position.coords.longitude
+      const accuracy = position.coords.accuracy
+      const resolved = await reverseGeocode(latitude, longitude, apiKey)
+
+      setValue({
+        location: resolved.location,
+        address: resolved.address,
+        city: resolved.city,
+        area: resolved.area,
+        postal_code: resolved.postal_code,
+        google_place_id: resolved.google_place_id,
+        state: resolved.state,
+        country: resolved.country,
+        district: resolved.district,
+        landmark: resolved.landmark,
+        latitude: latitude.toFixed(7),
+        longitude: longitude.toFixed(7),
+        location_accuracy_meters: Number.isFinite(accuracy) ? accuracy.toFixed(1) : '',
+      })
+      setStatus('Current location selected.')
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Could not get current location.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="business-location-picker">
+      <div className="business-location-control">
+        <MapPin size={18} />
+        <input
+          name="location"
+          placeholder="Use current location"
+          required={required}
+          onChange={(event) => updateField('location', event.target.value)}
+          value={value.location}
+        />
+        <button disabled={loading} type="button" onClick={useCurrentLocation}>
+          <LocateFixed size={17} />
+          {loading ? 'Locating' : 'Use current'}
+        </button>
+      </div>
+      {value.address ? (
+        <div className="business-location-preview">
+          <label>
+            Full address
+            <textarea
+              name="address"
+              onChange={(event) => updateField('address', event.target.value)}
+              value={value.address}
+            />
+          </label>
+          <div className="business-location-preview-grid">
+            <label>
+              City
+              <input
+                name="city"
+                onChange={(event) => updateField('city', event.target.value)}
+                value={value.city}
+              />
+            </label>
+            <label>
+              Area
+              <input
+                name="area"
+                onChange={(event) => updateField('area', event.target.value)}
+                value={value.area}
+              />
+            </label>
+            <label>
+              Pincode
+              <input
+                name="postal_code"
+                inputMode="numeric"
+                onChange={(event) => updateField('postal_code', event.target.value)}
+                value={value.postal_code}
+              />
+            </label>
+            <label>
+              Landmark
+              <input
+                name="landmark"
+                onChange={(event) => updateField('landmark', event.target.value)}
+                value={value.landmark}
+              />
+            </label>
+          </div>
+        </div>
+      ) : null}
+      {status ? <small className="business-location-status">{status}</small> : null}
+      {!value.address ? <input name="address" type="hidden" value="" /> : null}
+      {!value.address ? <input name="city" type="hidden" value="" /> : null}
+      {!value.address ? <input name="area" type="hidden" value="" /> : null}
+      {!value.address ? <input name="postal_code" type="hidden" value="" /> : null}
+      {!value.address ? <input name="landmark" type="hidden" value="" /> : null}
+      <input name="google_place_id" type="hidden" value={value.google_place_id} />
+      <input name="state" type="hidden" value={value.state} />
+      <input name="country" type="hidden" value={value.country} />
+      <input name="district" type="hidden" value={value.district} />
+      <input name="latitude" type="hidden" value={value.latitude} />
+      <input name="longitude" type="hidden" value={value.longitude} />
+      <input name="location_accuracy_meters" type="hidden" value={value.location_accuracy_meters} />
+    </div>
+  )
+}
+
+function getBrowserPosition() {
+  return new Promise<GeolocationPosition>((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      maximumAge: 60_000,
+      timeout: 15_000,
+    })
+  }).catch((err: GeolocationPositionError) => {
+    if (err.code === err.PERMISSION_DENIED) {
+      throw new Error('Location permission was denied.')
+    }
+    if (err.code === err.POSITION_UNAVAILABLE) {
+      throw new Error('Current location is unavailable.')
+    }
+    if (err.code === err.TIMEOUT) {
+      throw new Error('Location request timed out.')
+    }
+    throw new Error('Could not get current location.')
+  })
+}
+
+async function reverseGeocode(latitude: number, longitude: number, apiKey: string) {
+  const googleMaps = await loadGoogleMaps(apiKey)
+  const geocoder = new googleMaps.maps.Geocoder()
+
+  const results = await new Promise<GoogleGeocodeResult[]>((resolve, reject) => {
+    geocoder.geocode({ location: { lat: latitude, lng: longitude } }, (geocodeResults, status) => {
+      if (status === googleMaps.maps.GeocoderStatus.OK && geocodeResults?.length) {
+        resolve(geocodeResults)
+        return
+      }
+
+      reject(new Error('No address found for current location.'))
+    })
+  })
+
+  return locationValueFromGeocode(results[0])
+}
+
+function loadGoogleMaps(apiKey: string) {
+  if (window.google?.maps) {
+    return Promise.resolve(window.google)
+  }
+  if (googleMapsLoader) {
+    return googleMapsLoader
+  }
+
+  googleMapsLoader = new Promise((resolve, reject) => {
+    const script = document.createElement('script')
+    const query = new URLSearchParams({
+      key: apiKey,
+    })
+    script.src = `https://maps.googleapis.com/maps/api/js?${query.toString()}`
+    script.async = true
+    script.defer = true
+    script.onload = () => {
+      if (window.google?.maps) {
+        resolve(window.google)
+        return
+      }
+      reject(new Error('Google Maps could not be loaded.'))
+    }
+    script.onerror = () => reject(new Error('Google Maps could not be loaded.'))
+    document.head.appendChild(script)
+  })
+
+  return googleMapsLoader
+}
+
+function locationValueFromGeocode(result: GoogleGeocodeResult): BusinessLocationValue {
+  const components = result.address_components ?? []
+  const area =
+    findAddressComponent(components, 'sublocality_level_1') ||
+    findAddressComponent(components, 'sublocality') ||
+    findAddressComponent(components, 'neighborhood') ||
+    findAddressComponent(components, 'locality')
+  const city =
+    findAddressComponent(components, 'locality') ||
+    findAddressComponent(components, 'administrative_area_level_3') ||
+    findAddressComponent(components, 'administrative_area_level_2')
+  const postalCode = findAddressComponent(components, 'postal_code')
+  const state = findAddressComponent(components, 'administrative_area_level_1')
+  const district =
+    findAddressComponent(components, 'administrative_area_level_2') ||
+    findAddressComponent(components, 'administrative_area_level_3')
+  const country = findAddressComponent(components, 'country')
+  const landmark =
+    findAddressComponent(components, 'premise') ||
+    findAddressComponent(components, 'point_of_interest') ||
+    findAddressComponent(components, 'establishment')
+  const location = [area, city].filter(Boolean).join(', ') || result.formatted_address || ''
+
+  return {
+    location,
+    address: result.formatted_address ?? location,
+    city,
+    area,
+    postal_code: postalCode,
+    google_place_id: result.place_id ?? '',
+    state,
+    country,
+    district,
+    landmark,
+    latitude: '',
+    longitude: '',
+    location_accuracy_meters: '',
+  }
+}
+
+function findAddressComponent(components: GoogleGeocodeAddressComponent[], type: string) {
+  return components.find((component) => component.types.includes(type))?.long_name ?? ''
+}
+
+function businessLocationValue(business: BusinessAccount): BusinessLocationValue {
+  return {
+    location: business.location,
+    address: business.address ?? '',
+    city: business.city ?? '',
+    area: business.area ?? '',
+    postal_code: business.postal_code ?? '',
+    google_place_id: business.google_place_id ?? '',
+    state: business.state ?? '',
+    country: business.country ?? '',
+    district: business.district ?? '',
+    landmark: business.landmark ?? '',
+    latitude: business.latitude === undefined ? '' : String(business.latitude),
+    longitude: business.longitude === undefined ? '' : String(business.longitude),
+    location_accuracy_meters: business.location_accuracy_meters === undefined
+      ? ''
+      : String(business.location_accuracy_meters),
+  }
 }
 
 function BusinessLoginForm({
@@ -977,6 +1874,145 @@ function optionalPriceRange(value: FormDataEntryValue | null) {
     text === 'premium' ||
     text === 'luxury'
   ) {
+    return text
+  }
+
+  return undefined
+}
+
+function onboardingSubmitStatus(event: FormEvent<HTMLFormElement>) {
+  const submitter = (event.nativeEvent as SubmitEvent).submitter
+  if (
+    submitter instanceof HTMLButtonElement &&
+    submitter.name === 'onboarding_status' &&
+    submitter.value === 'draft'
+  ) {
+    return 'draft'
+  }
+
+  return 'submitted'
+}
+
+function businessProfileCompleteness(business: BusinessAccount) {
+  const checks = [
+    business.business_name,
+    business.business_category,
+    business.business_subcategory,
+    business.location,
+    business.address,
+    business.city,
+    business.area,
+    business.postal_code,
+    business.contact_phone || business.whatsapp_number,
+    business.price_range,
+    business.description,
+    business.offerings,
+    business.mood_tags,
+    business.service_tags,
+    business.best_for,
+    business.facility_tags,
+    business.opening_hours,
+  ]
+  const completed = checks.filter((value) => String(value ?? '').trim()).length
+
+  return Math.round((completed / checks.length) * 100)
+}
+
+function businessOpeningHoursFromForm(form: FormData): BusinessOpeningHour[] {
+  const schedule: BusinessOpeningHour[] = []
+  for (let weekday = 0; weekday < businessWeekdays.length; weekday += 1) {
+    if (form.get(`opening_hours_${weekday}_closed`) === 'on') {
+      schedule.push({
+        weekday,
+        interval_order: 1,
+        is_closed: true,
+      })
+      continue
+    }
+
+    for (const intervalOrder of [1, 2]) {
+      const opensAt = String(form.get(`opening_hours_${weekday}_${intervalOrder}_opens_at`) ?? '').trim()
+      const closesAt = String(form.get(`opening_hours_${weekday}_${intervalOrder}_closes_at`) ?? '').trim()
+      if (!opensAt && !closesAt) {
+        continue
+      }
+      schedule.push({
+        weekday,
+        interval_order: intervalOrder,
+        is_closed: false,
+        opens_at: opensAt,
+        closes_at: closesAt,
+      })
+    }
+  }
+
+  return schedule
+}
+
+function formatBusinessOpeningHours(schedule: BusinessOpeningHour[]) {
+  const byDay = new Map<number, BusinessOpeningHour[]>()
+  for (const item of schedule) {
+    byDay.set(item.weekday, [...(byDay.get(item.weekday) ?? []), item])
+  }
+
+  return businessWeekdays
+    .map((day, weekday) => {
+      const daySchedule = byDay.get(weekday) ?? []
+      if (!daySchedule.length) return ''
+      if (daySchedule.some((item) => item.is_closed)) return `${day}: Closed`
+      const intervals = daySchedule
+        .filter((item) => item.opens_at && item.closes_at)
+        .sort((a, b) => a.interval_order - b.interval_order)
+        .map((item) => `${item.opens_at}-${item.closes_at}`)
+        .join(', ')
+      return intervals ? `${day}: ${intervals}` : ''
+    })
+    .filter(Boolean)
+    .join('; ')
+}
+
+function businessVenueExperiencesFromForm(form: FormData): BusinessVenueExperience[] {
+  const experiences: BusinessVenueExperience[] = []
+  for (let index = 0; index < 12; index += 1) {
+    const experienceName = String(form.get(`experience_${index}_name`) ?? '').trim()
+    const description = String(form.get(`experience_${index}_description`) ?? '').trim()
+    const category = String(form.get(`experience_${index}_category`) ?? '').trim()
+    if (!experienceName && !description && !category) {
+      continue
+    }
+
+    experiences.push({
+      experience_name: experienceName,
+      description,
+      category,
+      tags: String(form.get(`experience_${index}_tags`) ?? '').trim(),
+      starting_price: optionalNumber(form.get(`experience_${index}_starting_price`)),
+      average_price_per_person: optionalNumber(form.get(`experience_${index}_average_price_per_person`)),
+      typical_duration_minutes: optionalInteger(form.get(`experience_${index}_typical_duration_minutes`)),
+      min_group_size: optionalInteger(form.get(`experience_${index}_min_group_size`)),
+      ideal_group_size: optionalInteger(form.get(`experience_${index}_ideal_group_size`)),
+      max_group_size: optionalInteger(form.get(`experience_${index}_max_group_size`)),
+      indoor_outdoor: optionalIndoorOutdoor(form.get(`experience_${index}_indoor_outdoor`)),
+      booking_required: form.get(`experience_${index}_booking_required`) === 'on',
+      walk_in_available: form.get(`experience_${index}_walk_in_available`) === 'on',
+      status: 'active',
+      display_order: experiences.length + 1,
+    })
+  }
+
+  return experiences
+}
+
+function optionalInteger(value: FormDataEntryValue | null) {
+  const parsed = optionalNumber(value)
+  if (parsed === undefined) return undefined
+  const integer = Math.trunc(parsed)
+  return integer > 0 ? integer : undefined
+}
+
+function optionalIndoorOutdoor(value: FormDataEntryValue | null) {
+  const text = String(value ?? '').trim()
+  if (text === 'indoor' || text === 'outdoor' || text === 'both') {
     return text
   }
 
