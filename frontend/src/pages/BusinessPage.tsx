@@ -9,6 +9,7 @@ import {
   Clock3,
   ClipboardList,
   ForkKnife,
+  ImagePlus,
   LocateFixed,
   LogOut,
   MapPin,
@@ -23,15 +24,17 @@ import {
   X,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { ChangeEvent, FormEvent } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { ErrorBanner } from '../components/ErrorBanner'
 import businessHero from '../assets/zumers-business-hero.png'
 import { businessApi } from '../lib/api'
 import { businessPath } from '../lib/businessRoutes'
+import { cloudinaryDeliveryUrl, uploadToCloudinary } from '../lib/cloudinary'
 import type {
   BusinessAccount,
   BusinessDashboard,
+  BusinessMedia,
   BusinessOpeningHour,
   BusinessTaxonomyCategory,
   BusinessTaxonomyTag,
@@ -212,7 +215,7 @@ const onboardingBusinesses = [
 type BusinessAuthMode = 'signup' | 'login'
 type BusinessPageMode = 'landing' | 'dashboard'
 type BusinessDashboardSection = 'overview' | 'today' | 'offers' | 'bookings' | 'profile'
-type BusinessOnboardingStep = 'identity' | 'location' | 'contact' | 'discovery' | 'hours' | 'preview'
+type BusinessOnboardingStep = 'identity' | 'location' | 'contact' | 'discovery' | 'media' | 'hours' | 'preview'
 
 const businessDashboardSections = [
   { id: 'overview', label: 'Overview', icon: BarChart3 },
@@ -227,6 +230,7 @@ const businessOnboardingSteps = [
   { id: 'location', label: 'Location' },
   { id: 'contact', label: 'Contact' },
   { id: 'discovery', label: 'Discovery' },
+  { id: 'media', label: 'Media' },
   { id: 'hours', label: 'Hours' },
   { id: 'preview', label: 'Preview' },
 ] satisfies Array<{ id: BusinessOnboardingStep; label: string }>
@@ -350,6 +354,8 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
     const form = new FormData(event.currentTarget)
     const openingHoursSchedule = businessOpeningHoursFromForm(form)
     const venueExperiences = businessVenueExperiencesFromForm(form)
+    const businessMedia = businessMediaFromForm(form, 'business_media_json')
+    const venueMedia = businessMediaFromForm(form, 'venue_media_json')
     try {
       const updated = await businessApi.update({
         business_name: String(form.get('business_name')),
@@ -381,7 +387,9 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
         offerings: String(form.get('offerings')),
         opening_hours: formatBusinessOpeningHours(openingHoursSchedule),
         opening_hours_schedule: openingHoursSchedule,
+        business_media: businessMedia,
         venue_experiences: venueExperiences,
+        venue_media: venueMedia,
         onboarding_status: onboardingStatus,
       })
       setBusiness(updated)
@@ -542,9 +550,6 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
                 <span>{business.business_category} - {business.location}</span>
               </div>
             </div>
-            <Link className="business-secondary dark" to={businessPath()}>
-              View landing
-            </Link>
           </header>
 
           <ErrorBanner message={error} />
@@ -855,6 +860,16 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
                     value={business.facility_tags ?? ''}
                   />
                   <BusinessExperienceEditor experiences={business.primary_venue?.experiences ?? []} />
+                </div>
+                <div className={onboardingStepClass('media')}>
+                  <div className="business-form-section-title">
+                    <h3>Photos, menus, and videos</h3>
+                    <p>Organize media by purpose so Zumers can show the right visual in search and recommendations.</p>
+                  </div>
+                  <BusinessMediaManager
+                    businessMedia={business.media ?? []}
+                    venueMedia={business.primary_venue?.media ?? []}
+                  />
                 </div>
                 <div className={onboardingStepClass('hours')}>
                   <div className="business-form-section-title">
@@ -1326,6 +1341,198 @@ function normalizeTagValue(value: string) {
   return value.trim().toLowerCase()
 }
 
+function BusinessMediaManager({
+  businessMedia,
+  venueMedia,
+}: {
+  businessMedia: BusinessMedia[]
+  venueMedia: BusinessMedia[]
+}) {
+  const [businessItems, setBusinessItems] = useState(() => businessMedia)
+  const [venueItems, setVenueItems] = useState(() => venueMedia)
+
+  return (
+    <div className="business-media-manager">
+      <input
+        name="business_media_json"
+        type="hidden"
+        value={JSON.stringify(normalizeBusinessMediaOrder(businessItems))}
+      />
+      <input
+        name="venue_media_json"
+        type="hidden"
+        value={JSON.stringify(normalizeBusinessMediaOrder(venueItems))}
+      />
+      <BusinessMediaBucket
+        accept="image/*"
+        description="Main image for profile cards and future discovery pages."
+        items={businessItems}
+        label="Cover photo"
+        purpose="cover"
+        single
+        onChange={setBusinessItems}
+      />
+      <BusinessMediaBucket
+        accept="image/*"
+        description="General place photos for profile gallery."
+        items={businessItems}
+        label="Gallery"
+        purpose="gallery"
+        onChange={setBusinessItems}
+      />
+      <BusinessMediaBucket
+        accept="image/*"
+        description="Dishes, counters, packages, or products users can evaluate visually."
+        items={venueItems}
+        label="Food or products"
+        purpose="food"
+        onChange={setVenueItems}
+      />
+      <BusinessMediaBucket
+        accept="image/*,video/*"
+        description="Things people can do here, such as games, live music, trips, or workshops."
+        items={venueItems}
+        label="Activities"
+        purpose="activity"
+        onChange={setVenueItems}
+      />
+      <BusinessMediaBucket
+        accept="image/*"
+        description="Menu, rate card, package list, or ticket details."
+        items={venueItems}
+        label="Menu or rate card"
+        purpose="menu"
+        onChange={setVenueItems}
+      />
+      <BusinessMediaBucket
+        accept="video/*"
+        description="Short videos for richer recommendations and future reels-style discovery."
+        items={venueItems}
+        label="Videos"
+        purpose="video"
+        onChange={setVenueItems}
+      />
+    </div>
+  )
+}
+
+function BusinessMediaBucket({
+  accept,
+  description,
+  items,
+  label,
+  purpose,
+  single = false,
+  onChange,
+}: {
+  accept: string
+  description: string
+  items: BusinessMedia[]
+  label: string
+  purpose: BusinessMedia['purpose']
+  single?: boolean
+  onChange: (items: BusinessMedia[]) => void
+}) {
+  const [progress, setProgress] = useState<number | null>(null)
+  const [status, setStatus] = useState<string | null>(null)
+  const purposeItems = items.filter((item) => item.purpose === purpose)
+
+  async function upload(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? [])
+    event.target.value = ''
+    if (!files.length) return
+
+    setStatus(null)
+    setProgress(0)
+    try {
+      const uploadedItems: BusinessMedia[] = []
+      for (const file of files) {
+        const uploaded = await uploadToCloudinary(
+          file,
+          (uploadProgress) => setProgress(uploadProgress.percent),
+          businessApi.signUpload,
+        )
+        uploadedItems.push({
+          ...uploaded,
+          purpose,
+          display_order: purposeItems.length + uploadedItems.length,
+          status: 'active',
+        })
+      }
+
+      onChange(
+        single
+          ? [...items.filter((item) => item.purpose !== purpose), uploadedItems[uploadedItems.length - 1]]
+          : [...items, ...uploadedItems],
+      )
+      setStatus(`${uploadedItems.length} media item${uploadedItems.length === 1 ? '' : 's'} added.`)
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Media upload failed.')
+    } finally {
+      setProgress(null)
+    }
+  }
+
+  function remove(publicID: string) {
+    onChange(items.filter((item) => item.cloudinary_public_id !== publicID))
+  }
+
+  return (
+    <fieldset className="business-media-bucket">
+      <legend>{label}</legend>
+      <p>{description}</p>
+      <label className="business-media-upload">
+        <ImagePlus size={18} />
+        <span>{single && purposeItems.length ? 'Replace' : 'Upload'}</span>
+        <input accept={accept} multiple={!single} type="file" onChange={upload} />
+      </label>
+      {progress !== null ? (
+        <div className="upload-progress" aria-label={`${label} upload progress`}>
+          <span style={{ width: `${progress}%` }} />
+          <strong>{progress}%</strong>
+        </div>
+      ) : null}
+      {status ? <small>{status}</small> : null}
+      {purposeItems.length ? (
+        <div className="business-media-preview-grid">
+          {purposeItems.map((item) => (
+            <div className="business-media-preview" key={item.cloudinary_public_id}>
+              {item.media_type === 'video' ? (
+                <video
+                  controls
+                  playsInline
+                  poster={item.thumbnail_url}
+                  src={cloudinaryDeliveryUrl(item.media_type, item.secure_url)}
+                />
+              ) : (
+                <img
+                  alt={item.alt_text ?? label}
+                  src={cloudinaryDeliveryUrl(item.media_type, item.secure_url)}
+                />
+              )}
+              <button type="button" onClick={() => remove(item.cloudinary_public_id)} aria-label="Remove media">
+                <X size={15} />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </fieldset>
+  )
+}
+
+function normalizeBusinessMediaOrder(media: BusinessMedia[]) {
+  const counters = new Map<string, number>()
+  return media.map((item) => {
+    const displayOrder = counters.get(item.purpose) ?? 0
+    counters.set(item.purpose, displayOrder + 1)
+    return {
+      ...item,
+      display_order: displayOrder,
+    }
+  })
+}
+
 function BusinessOpeningHoursEditor({ schedule }: { schedule?: BusinessOpeningHour[] }) {
   const [closedDays, setClosedDays] = useState(() => {
     const initial = new Set<number>()
@@ -1363,30 +1570,28 @@ function BusinessOpeningHoursEditor({ schedule }: { schedule?: BusinessOpeningHo
               />
               Closed
             </label>
-            {[1, 2].map((intervalOrder) => {
-              const interval = schedule?.find(
-                (item) => item.weekday === weekday && item.interval_order === intervalOrder && !item.is_closed,
-              )
-              return (
-                <div key={intervalOrder} className="business-hours-interval">
-                  <span>{intervalOrder === 1 ? 'Main' : 'Second'}</span>
-                  <input
-                    aria-label={`${day} interval ${intervalOrder} opens at`}
-                    defaultValue={interval?.opens_at ?? ''}
-                    disabled={isClosed}
-                    name={`opening_hours_${weekday}_${intervalOrder}_opens_at`}
-                    type="time"
-                  />
-                  <input
-                    aria-label={`${day} interval ${intervalOrder} closes at`}
-                    defaultValue={interval?.closes_at ?? ''}
-                    disabled={isClosed}
-                    name={`opening_hours_${weekday}_${intervalOrder}_closes_at`}
-                    type="time"
-                  />
-                </div>
-              )
-            })}
+            <div className="business-hours-interval">
+              <label>
+                Start timing
+                <input
+                  aria-label={`${day} start timing`}
+                  defaultValue={schedule?.find((item) => item.weekday === weekday && !item.is_closed)?.opens_at ?? ''}
+                  disabled={isClosed}
+                  name={`opening_hours_${weekday}_opens_at`}
+                  type="time"
+                />
+              </label>
+              <label>
+                Close timing
+                <input
+                  aria-label={`${day} close timing`}
+                  defaultValue={schedule?.find((item) => item.weekday === weekday && !item.is_closed)?.closes_at ?? ''}
+                  disabled={isClosed}
+                  name={`opening_hours_${weekday}_closes_at`}
+                  type="time"
+                />
+              </label>
+            </div>
           </fieldset>
         )
       })}
@@ -1912,8 +2117,14 @@ function businessProfileCompleteness(business: BusinessAccount) {
     business.best_for,
     business.facility_tags,
     business.opening_hours,
+    business.media?.some((item) => item.purpose === 'cover'),
+    business.primary_venue?.media?.length,
   ]
-  const completed = checks.filter((value) => String(value ?? '').trim()).length
+  const completed = checks.filter((value) => {
+    if (typeof value === 'boolean') return value
+    if (typeof value === 'number') return value > 0
+    return String(value ?? '').trim()
+  }).length
 
   return Math.round((completed / checks.length) * 100)
 }
@@ -1930,20 +2141,18 @@ function businessOpeningHoursFromForm(form: FormData): BusinessOpeningHour[] {
       continue
     }
 
-    for (const intervalOrder of [1, 2]) {
-      const opensAt = String(form.get(`opening_hours_${weekday}_${intervalOrder}_opens_at`) ?? '').trim()
-      const closesAt = String(form.get(`opening_hours_${weekday}_${intervalOrder}_closes_at`) ?? '').trim()
-      if (!opensAt && !closesAt) {
-        continue
-      }
-      schedule.push({
-        weekday,
-        interval_order: intervalOrder,
-        is_closed: false,
-        opens_at: opensAt,
-        closes_at: closesAt,
-      })
+    const opensAt = String(form.get(`opening_hours_${weekday}_opens_at`) ?? '').trim()
+    const closesAt = String(form.get(`opening_hours_${weekday}_closes_at`) ?? '').trim()
+    if (!opensAt && !closesAt) {
+      continue
     }
+    schedule.push({
+      weekday,
+      interval_order: 1,
+      is_closed: false,
+      opens_at: opensAt,
+      closes_at: closesAt,
+    })
   }
 
   return schedule
@@ -2001,6 +2210,46 @@ function businessVenueExperiencesFromForm(form: FormData): BusinessVenueExperien
   }
 
   return experiences
+}
+
+function businessMediaFromForm(form: FormData, fieldName: string): BusinessMedia[] {
+  const value = String(form.get(fieldName) ?? '').trim()
+  if (!value) return []
+
+  try {
+    const parsed = JSON.parse(value)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((item): item is BusinessMedia => isBusinessMedia(item))
+      .map((item, index) => ({
+        ...item,
+        display_order: Number.isFinite(item.display_order) && item.display_order >= 0
+          ? item.display_order
+          : index,
+      }))
+  } catch {
+    return []
+  }
+}
+
+function isBusinessMedia(value: unknown): value is BusinessMedia {
+  if (!value || typeof value !== 'object') return false
+  const item = value as Partial<BusinessMedia>
+  const validType = item.media_type === 'image' || item.media_type === 'video'
+  const validPurpose =
+    item.purpose === 'cover' ||
+    item.purpose === 'gallery' ||
+    item.purpose === 'food' ||
+    item.purpose === 'activity' ||
+    item.purpose === 'menu' ||
+    item.purpose === 'video'
+
+  return Boolean(
+    validType &&
+      validPurpose &&
+      item.cloudinary_public_id &&
+      item.secure_url,
+  )
 }
 
 function optionalInteger(value: FormDataEntryValue | null) {

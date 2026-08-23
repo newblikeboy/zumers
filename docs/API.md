@@ -54,6 +54,7 @@ Refresh/logout body:
 | GET | `/business/taxonomy` | No | Return controlled business categories, subcategories, and discovery tags |
 | GET | `/business/me` | Business | Return current business profile |
 | PATCH | `/business/me` | Business | Update business profile and onboarding data |
+| POST | `/business/media/sign-upload` | Business | Create a Cloudinary signed upload payload for business onboarding media |
 | GET | `/business/dashboard` | Business | Load business dashboard controls and booking requests |
 | PATCH | `/business/dashboard` | Business | Update today update and live offer controls |
 
@@ -113,7 +114,27 @@ Business profile updates can include discovery fields used later by the user-fac
       "booking_required": true,
       "walk_in_available": true,
       "status": "active",
-      "display_order": 1
+      "display_order": 1,
+      "media": []
+    }
+  ],
+  "business_media": [
+    {
+      "media_type": "image",
+      "purpose": "cover",
+      "cloudinary_public_id": "zumers/business-cover",
+      "secure_url": "https://res.cloudinary.com/example/image/upload/...",
+      "display_order": 0
+    }
+  ],
+  "venue_media": [
+    {
+      "media_type": "video",
+      "purpose": "video",
+      "cloudinary_public_id": "zumers/venue-video",
+      "secure_url": "https://res.cloudinary.com/example/video/upload/...",
+      "thumbnail_url": "https://res.cloudinary.com/example/image/upload/...",
+      "display_order": 0
     }
   ],
   "website_url": "https://example.com/menu",
@@ -124,8 +145,10 @@ Business profile updates can include discovery fields used later by the user-fac
 Business responses also include `open_now`, derived from `opening_hours_schedule`.
 Business responses also include `primary_venue`, a synchronized venue record created from the current single-location business profile.
 `primary_venue.experiences` returns the structured activities users can do at that venue.
+Business responses also include `media`, `primary_venue.media`, and `primary_venue.experiences[].media` arrays.
 
 `price_range` must be one of `budget`, `moderate`, `premium`, or `luxury`. Tag fields are comma-separated and normalized by the API.
+Business and venue media purposes can be `cover`, `gallery`, `food`, `activity`, `menu`, or `video`. Experience media purposes can be `cover`, `gallery`, `activity`, or `video`.
 
 ## Profiles
 

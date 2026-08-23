@@ -886,6 +886,7 @@ This future feature should influence database design now, especially around venu
 
 ### Phase 7: Media
 
+- Status: Complete for the current business onboarding model. Added `business_media`, `venue_media`, and `experience_media` tables, business-authenticated Cloudinary signing, business/venue/experience media response support, and an onboarding media step for cover, gallery, food/product, activity, menu/rate-card, and video uploads.
 - Add business/venue/experience media tables.
 - Classify media by purpose.
 - Add upload UI for cover, gallery, food, activity, menu, and videos.

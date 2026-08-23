@@ -69,45 +69,78 @@ type businessUpdateRequest struct {
 	OpeningHours         *string                          `json:"opening_hours"`
 	OpeningHoursSchedule []businessOpeningHourRequest     `json:"opening_hours_schedule"`
 	VenueExperiences     []businessVenueExperienceRequest `json:"venue_experiences"`
+	BusinessMedia        []businessMediaRequest           `json:"business_media"`
+	VenueMedia           []businessMediaRequest           `json:"venue_media"`
 	OnboardingStatus     *string                          `json:"onboarding_status"`
 }
 
+type businessMediaRequest struct {
+	MediaType          string  `json:"media_type"`
+	Purpose            string  `json:"purpose"`
+	CloudinaryPublicID string  `json:"cloudinary_public_id"`
+	SecureURL          string  `json:"secure_url"`
+	ThumbnailURL       *string `json:"thumbnail_url,omitempty"`
+	Width              *int    `json:"width,omitempty"`
+	Height             *int    `json:"height,omitempty"`
+	DurationSeconds    *int    `json:"duration_seconds,omitempty"`
+	AltText            *string `json:"alt_text,omitempty"`
+	DisplayOrder       int     `json:"display_order"`
+	Status             *string `json:"status,omitempty"`
+}
+
+type businessMediaResponse struct {
+	ID                 int64   `json:"id"`
+	MediaType          string  `json:"media_type"`
+	Purpose            string  `json:"purpose"`
+	CloudinaryPublicID string  `json:"cloudinary_public_id"`
+	SecureURL          string  `json:"secure_url"`
+	ThumbnailURL       *string `json:"thumbnail_url,omitempty"`
+	Width              *int    `json:"width,omitempty"`
+	Height             *int    `json:"height,omitempty"`
+	DurationSeconds    *int    `json:"duration_seconds,omitempty"`
+	AltText            *string `json:"alt_text,omitempty"`
+	DisplayOrder       int     `json:"display_order"`
+	Status             string  `json:"status"`
+}
+
 type businessVenueExperienceRequest struct {
-	ExperienceName         string   `json:"experience_name"`
-	Description            *string  `json:"description,omitempty"`
-	Category               *string  `json:"category,omitempty"`
-	Tags                   *string  `json:"tags,omitempty"`
-	StartingPrice          *float64 `json:"starting_price,omitempty"`
-	AveragePricePerPerson  *float64 `json:"average_price_per_person,omitempty"`
-	TypicalDurationMinutes *int     `json:"typical_duration_minutes,omitempty"`
-	MinGroupSize           *int     `json:"min_group_size,omitempty"`
-	IdealGroupSize         *int     `json:"ideal_group_size,omitempty"`
-	MaxGroupSize           *int     `json:"max_group_size,omitempty"`
-	IndoorOutdoor          *string  `json:"indoor_outdoor,omitempty"`
-	BookingRequired        bool     `json:"booking_required"`
-	WalkInAvailable        bool     `json:"walk_in_available"`
-	Status                 *string  `json:"status,omitempty"`
-	DisplayOrder           int      `json:"display_order"`
+	ExperienceName         string                 `json:"experience_name"`
+	Description            *string                `json:"description,omitempty"`
+	Category               *string                `json:"category,omitempty"`
+	Tags                   *string                `json:"tags,omitempty"`
+	StartingPrice          *float64               `json:"starting_price,omitempty"`
+	AveragePricePerPerson  *float64               `json:"average_price_per_person,omitempty"`
+	TypicalDurationMinutes *int                   `json:"typical_duration_minutes,omitempty"`
+	MinGroupSize           *int                   `json:"min_group_size,omitempty"`
+	IdealGroupSize         *int                   `json:"ideal_group_size,omitempty"`
+	MaxGroupSize           *int                   `json:"max_group_size,omitempty"`
+	IndoorOutdoor          *string                `json:"indoor_outdoor,omitempty"`
+	BookingRequired        bool                   `json:"booking_required"`
+	WalkInAvailable        bool                   `json:"walk_in_available"`
+	Status                 *string                `json:"status,omitempty"`
+	DisplayOrder           int                    `json:"display_order"`
+	Media                  []businessMediaRequest `json:"media,omitempty"`
 }
 
 type businessVenueExperienceResponse struct {
-	ID                     int64    `json:"id"`
-	VenueID                int64    `json:"venue_id"`
-	ExperienceName         string   `json:"experience_name"`
-	Description            *string  `json:"description,omitempty"`
-	Category               *string  `json:"category,omitempty"`
-	Tags                   *string  `json:"tags,omitempty"`
-	StartingPrice          *float64 `json:"starting_price,omitempty"`
-	AveragePricePerPerson  *float64 `json:"average_price_per_person,omitempty"`
-	TypicalDurationMinutes *int     `json:"typical_duration_minutes,omitempty"`
-	MinGroupSize           *int     `json:"min_group_size,omitempty"`
-	IdealGroupSize         *int     `json:"ideal_group_size,omitempty"`
-	MaxGroupSize           *int     `json:"max_group_size,omitempty"`
-	IndoorOutdoor          *string  `json:"indoor_outdoor,omitempty"`
-	BookingRequired        bool     `json:"booking_required"`
-	WalkInAvailable        bool     `json:"walk_in_available"`
-	Status                 string   `json:"status"`
-	DisplayOrder           int      `json:"display_order"`
+	ID                     int64                   `json:"id"`
+	VenueID                int64                   `json:"venue_id"`
+	ExperienceName         string                  `json:"experience_name"`
+	Description            *string                 `json:"description,omitempty"`
+	Category               *string                 `json:"category,omitempty"`
+	Tags                   *string                 `json:"tags,omitempty"`
+	StartingPrice          *float64                `json:"starting_price,omitempty"`
+	AveragePricePerPerson  *float64                `json:"average_price_per_person,omitempty"`
+	TypicalDurationMinutes *int                    `json:"typical_duration_minutes,omitempty"`
+	MinGroupSize           *int                    `json:"min_group_size,omitempty"`
+	IdealGroupSize         *int                    `json:"ideal_group_size,omitempty"`
+	MaxGroupSize           *int                    `json:"max_group_size,omitempty"`
+	IndoorOutdoor          *string                 `json:"indoor_outdoor,omitempty"`
+	BookingRequired        bool                    `json:"booking_required"`
+	WalkInAvailable        bool                    `json:"walk_in_available"`
+	Status                 string                  `json:"status"`
+	DisplayOrder           int                     `json:"display_order"`
+	Media                  []businessMediaResponse `json:"media"`
 }
 
 type businessOpeningHourRequest struct {
@@ -160,6 +193,7 @@ type businessResponse struct {
 	OpeningHours         *string                       `json:"opening_hours,omitempty"`
 	OpeningHoursSchedule []businessOpeningHourResponse `json:"opening_hours_schedule"`
 	OpenNow              bool                          `json:"open_now"`
+	Media                []businessMediaResponse       `json:"media"`
 	PrimaryVenue         *businessVenueResponse        `json:"primary_venue,omitempty"`
 	OnboardingStatus     string                        `json:"onboarding_status"`
 	AccountStatus        string                        `json:"account_status"`
@@ -189,6 +223,7 @@ type businessVenueResponse struct {
 	ServiceRadiusKM  *float64                          `json:"service_radius_km,omitempty"`
 	OpeningHours     *string                           `json:"opening_hours,omitempty"`
 	Status           string                            `json:"status"`
+	Media            []businessMediaResponse           `json:"media"`
 	Experiences      []businessVenueExperienceResponse `json:"experiences"`
 }
 
@@ -401,6 +436,14 @@ func (s *Server) handleBusinessUpdate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if err := validateBusinessMedia(req.BusinessMedia, "business"); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := validateBusinessMedia(req.VenueMedia, "venue"); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
@@ -492,6 +535,18 @@ func (s *Server) handleBusinessUpdate(w http.ResponseWriter, r *http.Request) {
 	if req.VenueExperiences != nil {
 		if err := s.replaceVenueExperiences(r.Context(), tx, primaryVenueID, req.VenueExperiences); err != nil {
 			writeError(w, http.StatusInternalServerError, "could not update venue experiences")
+			return
+		}
+	}
+	if req.BusinessMedia != nil {
+		if err := s.replaceBusinessMedia(r.Context(), tx, currentBusinessID(r), req.BusinessMedia); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not update business media")
+			return
+		}
+	}
+	if req.VenueMedia != nil {
+		if err := s.replaceVenueMedia(r.Context(), tx, primaryVenueID, req.VenueMedia); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not update venue media")
 			return
 		}
 	}
@@ -609,6 +664,10 @@ func (s *Server) getBusinessResponse(ctx context.Context, businessID int64) (bus
 	business.Description = nullableString(description)
 	business.Offerings = nullableString(offerings)
 	business.OpeningHours = nullableString(openingHours)
+	business.Media, err = s.getBusinessMedia(ctx, businessID)
+	if err != nil {
+		return businessResponse{}, err
+	}
 	business.OpeningHoursSchedule, err = s.getBusinessOpeningHours(ctx, businessID)
 	if err != nil {
 		return businessResponse{}, err
@@ -678,6 +737,10 @@ func (s *Server) getPrimaryBusinessVenue(ctx context.Context, businessID int64) 
 	venue.LocationAccuracy = nullableFloat64(locationAccuracy)
 	venue.ServiceRadiusKM = nullableFloat64(serviceRadiusKM)
 	venue.OpeningHours = nullableString(openingHours)
+	venue.Media, err = s.getVenueMedia(ctx, venue.ID)
+	if err != nil {
+		return nil, err
+	}
 	experiences, err := s.getVenueExperiences(ctx, venue.ID)
 	if err != nil {
 		return nil, err
@@ -741,6 +804,10 @@ func (s *Server) getVenueExperiences(ctx context.Context, venueID int64) ([]busi
 		item.IdealGroupSize = nullableInt(idealGroup)
 		item.MaxGroupSize = nullableInt(maxGroup)
 		item.IndoorOutdoor = nullableString(indoorOutdoor)
+		item.Media, err = s.getExperienceMedia(ctx, item.ID)
+		if err != nil {
+			return nil, err
+		}
 		experiences = append(experiences, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -782,6 +849,81 @@ func (s *Server) getBusinessOpeningHours(ctx context.Context, businessID int64) 
 	return schedule, nil
 }
 
+func (s *Server) getBusinessMedia(ctx context.Context, businessID int64) ([]businessMediaResponse, error) {
+	return s.getBusinessMediaRows(ctx,
+		`SELECT id, media_type, purpose, cloudinary_public_id, secure_url, thumbnail_url,
+		        width, height, duration_seconds, alt_text, display_order, status
+		 FROM business_media
+		 WHERE business_id = $1 AND status = 'active'
+		 ORDER BY purpose, display_order, id`,
+		businessID,
+	)
+}
+
+func (s *Server) getVenueMedia(ctx context.Context, venueID int64) ([]businessMediaResponse, error) {
+	return s.getBusinessMediaRows(ctx,
+		`SELECT id, media_type, purpose, cloudinary_public_id, secure_url, thumbnail_url,
+		        width, height, duration_seconds, alt_text, display_order, status
+		 FROM venue_media
+		 WHERE venue_id = $1 AND status = 'active'
+		 ORDER BY purpose, display_order, id`,
+		venueID,
+	)
+}
+
+func (s *Server) getExperienceMedia(ctx context.Context, experienceID int64) ([]businessMediaResponse, error) {
+	return s.getBusinessMediaRows(ctx,
+		`SELECT id, media_type, purpose, cloudinary_public_id, secure_url, thumbnail_url,
+		        width, height, duration_seconds, alt_text, display_order, status
+		 FROM experience_media
+		 WHERE experience_id = $1 AND status = 'active'
+		 ORDER BY purpose, display_order, id`,
+		experienceID,
+	)
+}
+
+func (s *Server) getBusinessMediaRows(ctx context.Context, query string, targetID int64) ([]businessMediaResponse, error) {
+	rows, err := s.db.QueryContext(ctx, query, targetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	media := make([]businessMediaResponse, 0)
+	for rows.Next() {
+		var item businessMediaResponse
+		var thumbnailURL, altText sql.NullString
+		var width, height, duration sql.NullInt64
+		if err := rows.Scan(
+			&item.ID,
+			&item.MediaType,
+			&item.Purpose,
+			&item.CloudinaryPublicID,
+			&item.SecureURL,
+			&thumbnailURL,
+			&width,
+			&height,
+			&duration,
+			&altText,
+			&item.DisplayOrder,
+			&item.Status,
+		); err != nil {
+			return nil, err
+		}
+		item.ThumbnailURL = nullableString(thumbnailURL)
+		item.Width = nullableInt(width)
+		item.Height = nullableInt(height)
+		item.DurationSeconds = nullableInt(duration)
+		item.AltText = nullableString(altText)
+		media = append(media, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return media, nil
+}
+
 func (s *Server) replaceBusinessOpeningHours(ctx context.Context, tx *sql.Tx, businessID int64, schedule []businessOpeningHourRequest) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM business_opening_hours WHERE business_id = $1`, businessID); err != nil {
 		return err
@@ -810,6 +952,104 @@ func (s *Server) replaceBusinessOpeningHours(ctx context.Context, tx *sql.Tx, bu
 	}
 
 	return nil
+}
+
+func (s *Server) replaceBusinessMedia(ctx context.Context, tx *sql.Tx, businessID int64, media []businessMediaRequest) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM business_media WHERE business_id = $1`, businessID); err != nil {
+		return err
+	}
+
+	for index, item := range normalizeBusinessMedia(media) {
+		if err := insertBusinessMedia(ctx, tx,
+			`INSERT INTO business_media (
+			     business_id, media_type, purpose, cloudinary_public_id, secure_url,
+			     thumbnail_url, width, height, duration_seconds, alt_text, display_order, status
+			 )
+			 VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8, $9, NULLIF($10, ''), $11, $12)`,
+			businessID,
+			item,
+			index,
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *Server) replaceVenueMedia(ctx context.Context, tx *sql.Tx, venueID int64, media []businessMediaRequest) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM venue_media WHERE venue_id = $1`, venueID); err != nil {
+		return err
+	}
+
+	for index, item := range normalizeBusinessMedia(media) {
+		if err := insertBusinessMedia(ctx, tx,
+			`INSERT INTO venue_media (
+			     venue_id, media_type, purpose, cloudinary_public_id, secure_url,
+			     thumbnail_url, width, height, duration_seconds, alt_text, display_order, status
+			 )
+			 VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8, $9, NULLIF($10, ''), $11, $12)`,
+			venueID,
+			item,
+			index,
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *Server) replaceExperienceMedia(ctx context.Context, tx *sql.Tx, experienceID int64, media []businessMediaRequest) error {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM experience_media WHERE experience_id = $1`, experienceID); err != nil {
+		return err
+	}
+
+	for index, item := range normalizeBusinessMedia(media) {
+		if err := insertBusinessMedia(ctx, tx,
+			`INSERT INTO experience_media (
+			     experience_id, media_type, purpose, cloudinary_public_id, secure_url,
+			     thumbnail_url, width, height, duration_seconds, alt_text, display_order, status
+			 )
+			 VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''), $7, $8, $9, NULLIF($10, ''), $11, $12)`,
+			experienceID,
+			item,
+			index,
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func insertBusinessMedia(ctx context.Context, tx *sql.Tx, query string, targetID int64, item businessMediaRequest, index int) error {
+	displayOrder := item.DisplayOrder
+	if displayOrder < 0 {
+		displayOrder = index
+	}
+	status := strings.TrimSpace(valueOrEmpty(item.Status))
+	if status == "" {
+		status = "active"
+	}
+	_, err := tx.ExecContext(
+		ctx,
+		query,
+		targetID,
+		strings.TrimSpace(item.MediaType),
+		strings.TrimSpace(item.Purpose),
+		strings.TrimSpace(item.CloudinaryPublicID),
+		strings.TrimSpace(item.SecureURL),
+		strings.TrimSpace(valueOrEmpty(item.ThumbnailURL)),
+		item.Width,
+		item.Height,
+		item.DurationSeconds,
+		strings.TrimSpace(valueOrEmpty(item.AltText)),
+		displayOrder,
+		status,
+	)
+
+	return err
 }
 
 func (s *Server) syncPrimaryBusinessVenue(ctx context.Context, tx *sql.Tx, businessID int64) (int64, error) {
@@ -870,7 +1110,8 @@ func (s *Server) replaceVenueExperiences(ctx context.Context, tx *sql.Tx, venueI
 		if displayOrder <= 0 {
 			displayOrder = index + 1
 		}
-		if _, err := tx.ExecContext(
+		var experienceID int64
+		if err := tx.QueryRowContext(
 			ctx,
 			`INSERT INTO venue_experiences (
 			     venue_id, experience_name, description, category, tags,
@@ -882,7 +1123,8 @@ func (s *Server) replaceVenueExperiences(ctx context.Context, tx *sql.Tx, venueI
 			     $1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''),
 			     $6, $7, $8, $9, $10, $11, NULLIF($12, ''),
 			     $13, $14, $15, $16
-			 )`,
+			 )
+			 RETURNING id`,
 			venueID,
 			strings.TrimSpace(item.ExperienceName),
 			strings.TrimSpace(valueOrEmpty(item.Description)),
@@ -899,8 +1141,13 @@ func (s *Server) replaceVenueExperiences(ctx context.Context, tx *sql.Tx, venueI
 			item.WalkInAvailable,
 			status,
 			displayOrder,
-		); err != nil {
+		).Scan(&experienceID); err != nil {
 			return err
+		}
+		if item.Media != nil {
+			if err := s.replaceExperienceMedia(ctx, tx, experienceID, item.Media); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -978,9 +1225,54 @@ func validateBusinessVenueExperiences(experiences []businessVenueExperienceReque
 		if status != "" && status != "draft" && status != "active" && status != "inactive" {
 			return errors.New("venue_experiences status must be draft, active, or inactive")
 		}
+		if err := validateBusinessMedia(item.Media, "experience"); err != nil {
+			return err
+		}
 	}
 
 	return nil
+}
+
+func validateBusinessMedia(media []businessMediaRequest, scope string) error {
+	for _, item := range normalizeBusinessMedia(media) {
+		mediaType := strings.TrimSpace(item.MediaType)
+		if mediaType != "image" && mediaType != "video" {
+			return errors.New(scope + "_media media_type must be image or video")
+		}
+		if strings.TrimSpace(item.CloudinaryPublicID) == "" || strings.TrimSpace(item.SecureURL) == "" {
+			return errors.New(scope + "_media cloudinary_public_id and secure_url are required")
+		}
+		purpose := strings.TrimSpace(item.Purpose)
+		if !businessMediaPurposeAllowed(scope, purpose) {
+			return errors.New(scope + "_media purpose is not supported")
+		}
+		if item.Width != nil && *item.Width < 0 {
+			return errors.New(scope + "_media width must be positive")
+		}
+		if item.Height != nil && *item.Height < 0 {
+			return errors.New(scope + "_media height must be positive")
+		}
+		if item.DurationSeconds != nil && *item.DurationSeconds < 0 {
+			return errors.New(scope + "_media duration_seconds must be positive")
+		}
+		if item.DisplayOrder < 0 {
+			return errors.New(scope + "_media display_order must be positive")
+		}
+		status := strings.TrimSpace(valueOrEmpty(item.Status))
+		if status != "" && status != "active" && status != "hidden" {
+			return errors.New(scope + "_media status must be active or hidden")
+		}
+	}
+
+	return nil
+}
+
+func businessMediaPurposeAllowed(scope string, purpose string) bool {
+	if scope == "experience" {
+		return purpose == "cover" || purpose == "gallery" || purpose == "activity" || purpose == "video"
+	}
+
+	return purpose == "cover" || purpose == "gallery" || purpose == "food" || purpose == "activity" || purpose == "menu" || purpose == "video"
 }
 
 func normalizeBusinessVenueExperiences(experiences []businessVenueExperienceRequest) []businessVenueExperienceRequest {
@@ -991,6 +1283,31 @@ func normalizeBusinessVenueExperiences(experiences []businessVenueExperienceRequ
 			strings.TrimSpace(valueOrEmpty(item.Category)) == "" {
 			continue
 		}
+		normalized = append(normalized, item)
+	}
+
+	return normalized
+}
+
+func normalizeBusinessMedia(media []businessMediaRequest) []businessMediaRequest {
+	normalized := make([]businessMediaRequest, 0, len(media))
+	seen := make(map[string]struct{}, len(media))
+	for _, item := range media {
+		item.MediaType = strings.TrimSpace(item.MediaType)
+		item.Purpose = strings.TrimSpace(item.Purpose)
+		item.CloudinaryPublicID = strings.TrimSpace(item.CloudinaryPublicID)
+		item.SecureURL = strings.TrimSpace(item.SecureURL)
+		if item.CloudinaryPublicID == "" && item.SecureURL == "" {
+			continue
+		}
+		key := item.CloudinaryPublicID
+		if key == "" {
+			key = item.SecureURL
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
 		normalized = append(normalized, item)
 	}
 

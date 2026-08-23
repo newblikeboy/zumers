@@ -3,6 +3,7 @@ import type {
   BusinessAccount,
   BusinessAuthResponse,
   BusinessDashboard,
+  BusinessMedia,
   BusinessTaxonomy,
   BusinessVenueExperience,
   CloudinarySignature,
@@ -304,7 +305,11 @@ export const businessApi = {
 
   me: () => businessApiRequest<BusinessAccount>('/business/me'),
 
-  update: (body: Partial<BusinessAccount> & { venue_experiences?: BusinessVenueExperience[] }) =>
+  update: (body: Partial<BusinessAccount> & {
+    business_media?: BusinessMedia[]
+    venue_experiences?: BusinessVenueExperience[]
+    venue_media?: BusinessMedia[]
+  }) =>
     businessApiRequest<BusinessAccount>('/business/me', {
       method: 'PATCH',
       body: JSON.stringify(body),
@@ -323,6 +328,12 @@ export const businessApi = {
   },
 
   taxonomy: () => businessApiRequest<BusinessTaxonomy>('/business/taxonomy'),
+
+  signUpload: () =>
+    businessApiRequest<CloudinarySignature>('/business/media/sign-upload', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
 }
 
 async function refreshSession(refreshToken: string) {

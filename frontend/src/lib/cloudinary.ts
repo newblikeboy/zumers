@@ -10,8 +10,9 @@ export type UploadProgress = {
 export async function uploadToCloudinary(
   file: File,
   onProgress?: (progress: UploadProgress) => void,
+  signUpload: () => Promise<CloudinarySignature> = api.signUpload,
 ): Promise<PostMediaInput> {
-  const signature = await api.signUpload()
+  const signature = await signUpload()
   validateFile(file, signature)
 
   if (file.type.startsWith('video/')) {

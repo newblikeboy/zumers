@@ -59,6 +59,7 @@ export type BusinessAccount = {
   opening_hours?: string
   opening_hours_schedule: BusinessOpeningHour[]
   open_now: boolean
+  media: BusinessMedia[]
   primary_venue?: BusinessVenue
   onboarding_status: 'draft' | 'submitted' | 'approved'
   account_status: 'active' | 'disabled'
@@ -88,7 +89,23 @@ export type BusinessVenue = {
   service_radius_km?: number
   opening_hours?: string
   status: 'active' | 'inactive'
+  media: BusinessMedia[]
   experiences: BusinessVenueExperience[]
+}
+
+export type BusinessMedia = {
+  id?: number
+  media_type: 'image' | 'video'
+  purpose: 'cover' | 'gallery' | 'food' | 'activity' | 'menu' | 'video'
+  cloudinary_public_id: string
+  secure_url: string
+  thumbnail_url?: string
+  width?: number
+  height?: number
+  duration_seconds?: number
+  alt_text?: string
+  display_order: number
+  status?: 'active' | 'hidden'
 }
 
 export type BusinessVenueExperience = {
@@ -109,6 +126,7 @@ export type BusinessVenueExperience = {
   walk_in_available: boolean
   status?: 'draft' | 'active' | 'inactive'
   display_order: number
+  media?: BusinessMedia[]
 }
 
 export type BusinessOpeningHour = {
