@@ -2,7 +2,10 @@ import type {
   AuthResponse,
   BusinessAccount,
   BusinessAuthResponse,
+  BusinessClaimRequest,
   BusinessDashboard,
+  BusinessDashboardUpdate,
+  BusinessDuplicateCheckResponse,
   BusinessMedia,
   BusinessTaxonomy,
   BusinessVenueExperience,
@@ -290,6 +293,11 @@ export const businessApi = {
     password: string
     business_name: string
     business_category: string
+    business_subcategory?: string
+    location?: string
+    city?: string
+    area?: string
+    google_place_id?: string
     contact_phone?: string
   }) =>
     businessApiRequest<BusinessAuthResponse>('/business/signup', {
@@ -305,6 +313,31 @@ export const businessApi = {
 
   me: () => businessApiRequest<BusinessAccount>('/business/me'),
 
+  duplicateCheck: (body: {
+    business_name?: string
+    location?: string
+    city?: string
+    area?: string
+    google_place_id?: string
+  }) =>
+    businessApiRequest<BusinessDuplicateCheckResponse>('/business/duplicate-check', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  createClaim: (body: {
+    existing_business_id: number
+    claimant_name?: string
+    claimant_phone?: string
+    claimant_note?: string
+    evidence_url?: string
+    match_source?: 'google_place_id' | 'name_location' | 'manual'
+  }) =>
+    businessApiRequest<BusinessClaimRequest>('/business/claims', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
   update: (body: Partial<BusinessAccount> & {
     business_media?: BusinessMedia[]
     venue_experiences?: BusinessVenueExperience[]
@@ -317,7 +350,7 @@ export const businessApi = {
 
   dashboard: () => businessApiRequest<BusinessDashboard>('/business/dashboard'),
 
-  updateDashboard: (body: Partial<BusinessDashboard>) =>
+  updateDashboard: (body: BusinessDashboardUpdate) =>
     businessApiRequest<BusinessDashboard>('/business/dashboard', {
       method: 'PATCH',
       body: JSON.stringify(body),

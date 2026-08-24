@@ -893,12 +893,14 @@ This future feature should influence database design now, especially around venu
 
 ### Phase 8: Offers And Events
 
+- Status: Complete for the current business dashboard model. Added `business_offers` and `business_events`, backfilled legacy dashboard offer fields into normalized offers, exposed `offers` and `events` in dashboard responses, and added dashboard controls for publishing a live offer and temporary event while keeping today's update as a lightweight freshness signal.
 - Replace single dashboard offer fields with `business_offers`.
 - Add `business_events`.
 - Keep dashboard quick update as a lightweight freshness signal.
 
 ### Phase 9: Verification And Claiming
 
+- Status: Complete for the current single-business account model. Added `verification_level` to businesses and venues, persisted `business_claim_requests`, added a public duplicate-check API using Google Place ID or name/location, added a business-authenticated claim request API, and added signup duplicate warnings before creating likely duplicate businesses.
 - Add verification levels.
 - Add claim-business flow.
 - Add duplicate checks using name/location and Google Place ID.

@@ -34,6 +34,7 @@ import { cloudinaryDeliveryUrl, uploadToCloudinary } from '../lib/cloudinary'
 import type {
   BusinessAccount,
   BusinessDashboard,
+  BusinessDuplicateMatch,
   BusinessMedia,
   BusinessOpeningHour,
   BusinessTaxonomyCategory,
@@ -108,7 +109,10 @@ const fallbackBusinessCategories: BusinessTaxonomyCategory[] = [
     subcategories: [
       { id: 1, slug: 'chaat', name: 'Chaat' },
       { id: 2, slug: 'momos', name: 'Momos' },
-      { id: 3, slug: 'street-food-market', name: 'Street Food Market' },
+      { id: 3, slug: 'rolls', name: 'Rolls' },
+      { id: 4, slug: 'golgappe', name: 'Golgappe' },
+      { id: 5, slug: 'kebab-tandoor', name: 'Kebab / Tandoor' },
+      { id: 6, slug: 'street-food-market', name: 'Street Food Market' },
     ],
   },
   {
@@ -116,9 +120,12 @@ const fallbackBusinessCategories: BusinessTaxonomyCategory[] = [
     slug: 'restaurant-or-cafe',
     name: 'Restaurant or cafe',
     subcategories: [
-      { id: 4, slug: 'restaurant', name: 'Restaurant' },
-      { id: 5, slug: 'cafe', name: 'Cafe' },
-      { id: 6, slug: 'rooftop-cafe', name: 'Rooftop Cafe' },
+      { id: 7, slug: 'restaurant', name: 'Restaurant' },
+      { id: 8, slug: 'cafe', name: 'Cafe' },
+      { id: 9, slug: 'rooftop-cafe', name: 'Rooftop Cafe' },
+      { id: 10, slug: 'fine-dining', name: 'Fine Dining' },
+      { id: 11, slug: 'family-restaurant', name: 'Family Restaurant' },
+      { id: 12, slug: 'bakery', name: 'Bakery' },
     ],
   },
   {
@@ -126,34 +133,146 @@ const fallbackBusinessCategories: BusinessTaxonomyCategory[] = [
     slug: 'fun-and-entertainment',
     name: 'Fun and entertainment',
     subcategories: [
-      { id: 7, slug: 'bowling', name: 'Bowling' },
-      { id: 8, slug: 'gaming-zone', name: 'Gaming Zone' },
-      { id: 9, slug: 'vr-gaming', name: 'VR Gaming' },
+      { id: 13, slug: 'cinema', name: 'Cinema' },
+      { id: 14, slug: 'bowling', name: 'Bowling' },
+      { id: 15, slug: 'gaming-zone', name: 'Gaming Zone' },
+      { id: 16, slug: 'arcade', name: 'Arcade' },
+      { id: 17, slug: 'escape-room', name: 'Escape Room' },
+      { id: 18, slug: 'kids-play-area', name: 'Kids Play Area' },
     ],
   },
   {
     id: 4,
-    slug: 'travel-or-transport',
-    name: 'Travel or transport',
+    slug: 'adventure',
+    name: 'Adventure',
     subcategories: [
-      { id: 10, slug: 'weekend-trip', name: 'Weekend Trip' },
-      { id: 11, slug: 'tour-operator', name: 'Tour Operator' },
+      { id: 19, slug: 'go-karting', name: 'Go Karting' },
+      { id: 20, slug: 'trampoline-park', name: 'Trampoline Park' },
+      { id: 21, slug: 'paintball', name: 'Paintball' },
+      { id: 22, slug: 'water-park', name: 'Water Park' },
+      { id: 23, slug: 'trekking', name: 'Trekking' },
+      { id: 24, slug: 'camping', name: 'Camping' },
     ],
   },
   {
     id: 5,
-    slug: 'culture-and-events',
-    name: 'Culture and events',
+    slug: 'nightlife',
+    name: 'Nightlife',
     subcategories: [
-      { id: 12, slug: 'concert', name: 'Concert' },
-      { id: 13, slug: 'workshop', name: 'Workshop' },
+      { id: 25, slug: 'club', name: 'Club' },
+      { id: 26, slug: 'pub', name: 'Pub' },
+      { id: 27, slug: 'lounge', name: 'Lounge' },
+      { id: 28, slug: 'live-music', name: 'Live Music' },
+      { id: 29, slug: 'rooftop-bar', name: 'Rooftop Bar' },
+      { id: 30, slug: 'dj-night', name: 'DJ Night' },
     ],
   },
   {
     id: 6,
+    slug: 'culture-and-events',
+    name: 'Culture and events',
+    subcategories: [
+      { id: 31, slug: 'theatre', name: 'Theatre' },
+      { id: 32, slug: 'museum', name: 'Museum' },
+      { id: 33, slug: 'workshop', name: 'Workshop' },
+      { id: 34, slug: 'concert', name: 'Concert' },
+      { id: 35, slug: 'stand-up-comedy', name: 'Stand-up Comedy' },
+      { id: 36, slug: 'heritage-walk', name: 'Heritage Walk' },
+    ],
+  },
+  {
+    id: 7,
+    slug: 'sports-and-fitness',
+    name: 'Sports and fitness',
+    subcategories: [
+      { id: 37, slug: 'badminton', name: 'Badminton' },
+      { id: 38, slug: 'cricket-turf', name: 'Cricket Turf' },
+      { id: 39, slug: 'football-turf', name: 'Football Turf' },
+      { id: 40, slug: 'swimming', name: 'Swimming' },
+      { id: 41, slug: 'gym', name: 'Gym' },
+      { id: 42, slug: 'yoga', name: 'Yoga' },
+    ],
+  },
+  {
+    id: 8,
+    slug: 'relax-and-explore',
+    name: 'Relax and explore',
+    subcategories: [
+      { id: 43, slug: 'park', name: 'Park' },
+      { id: 44, slug: 'garden', name: 'Garden' },
+      { id: 45, slug: 'lake', name: 'Lake' },
+      { id: 46, slug: 'resort', name: 'Resort' },
+      { id: 47, slug: 'picnic-spot', name: 'Picnic Spot' },
+      { id: 48, slug: 'viewpoint', name: 'Viewpoint' },
+    ],
+  },
+  {
+    id: 9,
+    slug: 'travel-or-transport',
+    name: 'Travel or transport',
+    subcategories: [
+      { id: 49, slug: 'weekend-trip', name: 'Weekend Trip' },
+      { id: 50, slug: 'tour-operator', name: 'Tour Operator' },
+      { id: 51, slug: 'local-ride', name: 'Local Ride' },
+      { id: 52, slug: 'city-tour', name: 'City Tour' },
+      { id: 53, slug: 'cab-rental', name: 'Cab Rental' },
+      { id: 54, slug: 'bike-rental', name: 'Bike Rental' },
+    ],
+  },
+  {
+    id: 10,
+    slug: 'attractions-and-heritage',
+    name: 'Attractions and heritage',
+    subcategories: [
+      { id: 55, slug: 'monument', name: 'Monument' },
+      { id: 56, slug: 'heritage-site', name: 'Heritage Site' },
+      { id: 57, slug: 'temple', name: 'Temple / Religious Place' },
+      { id: 58, slug: 'photo-spot', name: 'Photo Spot' },
+    ],
+  },
+  {
+    id: 11,
+    slug: 'shopping-and-markets',
+    name: 'Shopping and markets',
+    subcategories: [
+      { id: 59, slug: 'mall', name: 'Mall' },
+      { id: 60, slug: 'local-market', name: 'Local Market' },
+      { id: 61, slug: 'flea-market', name: 'Flea Market' },
+      { id: 62, slug: 'night-market', name: 'Night Market' },
+    ],
+  },
+  {
+    id: 12,
+    slug: 'wellness-and-self-care',
+    name: 'Wellness and self care',
+    subcategories: [
+      { id: 63, slug: 'spa', name: 'Spa' },
+      { id: 64, slug: 'salon', name: 'Salon' },
+      { id: 65, slug: 'massage', name: 'Massage' },
+      { id: 66, slug: 'yoga-studio', name: 'Yoga Studio' },
+    ],
+  },
+  {
+    id: 13,
+    slug: 'learning-and-hobbies',
+    name: 'Learning and hobbies',
+    subcategories: [
+      { id: 67, slug: 'art-class', name: 'Art Class' },
+      { id: 68, slug: 'dance-class', name: 'Dance Class' },
+      { id: 69, slug: 'music-class', name: 'Music Class' },
+      { id: 70, slug: 'cooking-class', name: 'Cooking Class' },
+    ],
+  },
+  {
+    id: 14,
     slug: 'other-local-service',
     name: 'Other local service',
-    subcategories: [],
+    subcategories: [
+      { id: 71, slug: 'event-planner', name: 'Event Planner' },
+      { id: 72, slug: 'photographer', name: 'Photographer' },
+      { id: 73, slug: 'equipment-rental', name: 'Equipment Rental' },
+      { id: 74, slug: 'other-experience', name: 'Other Experience' },
+    ],
   },
 ]
 
@@ -225,6 +344,12 @@ const businessDashboardSections = [
   { id: 'profile', label: 'Business profile', icon: Building2 },
 ] satisfies Array<{ id: BusinessDashboardSection; label: string; icon: typeof BarChart3 }>
 
+const businessDashboardNavigation = [
+  { label: 'Workspace', items: ['overview', 'today'] },
+  { label: 'Engagement', items: ['offers', 'bookings'] },
+  { label: 'Business', items: ['profile'] },
+] satisfies Array<{ label: string; items: BusinessDashboardSection[] }>
+
 const businessOnboardingSteps = [
   { id: 'identity', label: 'Identity' },
   { id: 'location', label: 'Location' },
@@ -261,6 +386,7 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
   const [dashboardSection, setDashboardSection] = useState<BusinessDashboardSection>('overview')
   const [dashboardMenuOpen, setDashboardMenuOpen] = useState(false)
   const [onboardingStep, setOnboardingStep] = useState<BusinessOnboardingStep>('identity')
+  const [businessDuplicateMatches, setBusinessDuplicateMatches] = useState<BusinessDuplicateMatch[]>([])
   const [businessCategories, setBusinessCategories] =
     useState<BusinessTaxonomyCategory[]>(fallbackBusinessCategories)
   const [businessTags, setBusinessTags] = useState<BusinessTaxonomyTag[]>(fallbackBusinessTags)
@@ -307,11 +433,27 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
     setBusy('signup')
     setError(null)
     setSuccess(null)
+    setBusinessDuplicateMatches([])
     const form = new FormData(event.currentTarget)
     try {
+      const duplicateCheck = await businessApi.duplicateCheck({
+        business_name: String(form.get('business_name')),
+        location: String(form.get('location')),
+      })
+      if (duplicateCheck.matches.length) {
+        setBusinessDuplicateMatches(duplicateCheck.matches)
+        setError(
+          duplicateCheck.exact_match
+            ? 'This business already exists on Zumers. Claim the existing business instead.'
+            : 'A similar business already exists on Zumers. Check it before creating a duplicate.',
+        )
+        return
+      }
       const response = await businessApi.signup({
         business_name: String(form.get('business_name')),
         business_category: String(form.get('business_category')),
+        business_subcategory: String(form.get('business_subcategory')),
+        location: String(form.get('location')),
         contact_phone: String(form.get('contact_phone')),
         email: String(form.get('email')),
         password: String(form.get('password')),
@@ -429,6 +571,7 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
     const form = new FormData(event.currentTarget)
     try {
       const updated = await businessApi.updateDashboard({
+        offer_id: dashboard?.offer_id,
         offer_title: String(form.get('offer_title')),
         offer_details: String(form.get('offer_details')),
         offer_valid_until: String(form.get('valid_until')),
@@ -443,6 +586,31 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
     }
   }
 
+  async function saveEvent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setBusy('event')
+    setError(null)
+    setSuccess(null)
+    const form = new FormData(event.currentTarget)
+    try {
+      const updated = await businessApi.updateDashboard({
+        event_title: String(form.get('event_title')),
+        event_details: String(form.get('event_details')),
+        event_type: String(form.get('event_type')),
+        event_starts_at: String(form.get('event_starts_at')),
+        event_ends_at: String(form.get('event_ends_at')),
+        event_status: 'scheduled',
+      })
+      setDashboard(updated)
+      setSuccess('Event saved.')
+      event.currentTarget.reset()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save event')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   function logout() {
     businessApi.logout()
     setBusiness(null)
@@ -452,6 +620,7 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
   function openAuth(modeToOpen: BusinessAuthMode) {
     setError(null)
     setSuccess(null)
+    setBusinessDuplicateMatches([])
     setAuthMode(modeToOpen)
   }
 
@@ -484,9 +653,12 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
       { icon: Users, label: 'Profile visits', value: dashboard?.profile_visits ?? 0, hint: 'Last 24 hours' },
       { icon: Ticket, label: 'Bookings', value: dashboard?.bookings.length ?? 0, hint: 'Pending' },
       { icon: BadgeCheck, label: 'Saves', value: dashboard?.saves ?? 0, hint: 'This week' },
+      { icon: Percent, label: 'Active offers', value: (dashboard?.offers ?? []).filter((offer) => offer.status === 'active').length, hint: 'Published' },
+      { icon: CalendarDays, label: 'Events', value: (dashboard?.events ?? []).filter((event) => event.status === 'active' || event.status === 'scheduled').length, hint: 'Upcoming' },
     ]
     const activeOnboardingIndex = businessOnboardingSteps.findIndex((step) => step.id === onboardingStep)
     const onboardingCompletion = businessProfileCompleteness(business)
+    const completionTasks = businessProfileCompletionTasks(business)
     const onboardingStepClass = (step: BusinessOnboardingStep) =>
       onboardingStep === step ? 'business-onboarding-step active' : 'business-onboarding-step'
     const goToOnboardingStep = (direction: -1 | 1) => {
@@ -513,20 +685,27 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
             <strong>Zumers Business</strong>
           </Link>
           <nav aria-label="Business dashboard sections">
-            {businessDashboardSections.map((item) => {
-              const SectionIcon = item.icon
-              return (
-                <button
-                  key={item.id}
-                  className={dashboardSection === item.id ? 'active' : ''}
-                  type="button"
-                  onClick={() => selectDashboardSection(item.id)}
-                >
-                  <SectionIcon size={18} />
-                  <span>{item.label}</span>
-                </button>
-              )
-            })}
+            {businessDashboardNavigation.map((group) => (
+              <div className="business-dashboard-nav-group" key={group.label}>
+                <span>{group.label}</span>
+                {group.items.map((sectionID) => {
+                  const item = businessDashboardSections.find((section) => section.id === sectionID)
+                  if (!item) return null
+                  const SectionIcon = item.icon
+                  return (
+                    <button
+                      key={item.id}
+                      className={dashboardSection === item.id ? 'active' : ''}
+                      type="button"
+                      onClick={() => selectDashboardSection(item.id)}
+                    >
+                      <SectionIcon size={18} />
+                      <span>{item.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            ))}
           </nav>
           <button className="business-dashboard-logout" type="button" onClick={logout}>
             <LogOut size={18} /> Logout
@@ -549,6 +728,10 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
                 <h1>{business.business_name}</h1>
                 <span>{business.business_category} - {business.location}</span>
               </div>
+            </div>
+            <div className="business-verification-pill">
+              <BadgeCheck size={17} />
+              <span>{businessVerificationLabel(business.verification_level ?? 'unverified')}</span>
             </div>
           </header>
 
@@ -633,12 +816,12 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
           ) : null}
 
           {dashboardSection === 'offers' ? (
-            <section className="business-control-grid business-control-grid-single">
+            <section className="business-control-grid">
               <article className="business-control-panel">
                 <div className="business-panel-heading">
                   <Percent size={24} />
                   <div>
-                    <p className="business-label">Live offer</p>
+                    <p className="business-label">Offers</p>
                     <h2>Publish discount or deal</h2>
                   </div>
                 </div>
@@ -672,6 +855,79 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
                     {busy === 'offer' ? 'Saving offer' : 'Save live offer'}
                   </button>
                 </form>
+                {dashboard?.offers?.length ? (
+                  <div className="business-record-list">
+                    {dashboard.offers.map((offer) => (
+                      <div key={offer.id}>
+                        <strong>{offer.title}</strong>
+                        <span>{offer.description ?? 'Business offer'}</span>
+                        <small>
+                          {offer.status}
+                          {offer.ends_on ? ` - valid until ${offer.ends_on}` : ''}
+                        </small>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </article>
+
+              <article className="business-control-panel">
+                <div className="business-panel-heading">
+                  <CalendarDays size={24} />
+                  <div>
+                    <p className="business-label">Events</p>
+                    <h2>Add temporary event</h2>
+                  </div>
+                </div>
+                <form className="business-form-preview" onSubmit={saveEvent}>
+                  <label>
+                    Event title
+                    <input
+                      name="event_title"
+                      placeholder="Example: Live music night, workshop, screening"
+                    />
+                  </label>
+                  <label>
+                    Event type
+                    <input
+                      name="event_type"
+                      placeholder="Example: Live music, comedy, workshop"
+                    />
+                  </label>
+                  <label>
+                    Event details
+                    <textarea
+                      name="event_details"
+                      placeholder="Tell users what is happening, who it is for, and what to expect."
+                    />
+                  </label>
+                  <label>
+                    Starts at
+                    <input name="event_starts_at" type="datetime-local" />
+                  </label>
+                  <label>
+                    Ends at
+                    <input name="event_ends_at" type="datetime-local" />
+                  </label>
+                  <button className="business-primary" disabled={busy === 'event'}>
+                    <Save size={18} />
+                    {busy === 'event' ? 'Saving event' : 'Save event'}
+                  </button>
+                </form>
+                {dashboard?.events?.length ? (
+                  <div className="business-record-list">
+                    {dashboard.events.map((businessEvent) => (
+                      <div key={businessEvent.id}>
+                        <strong>{businessEvent.title}</strong>
+                        <span>{businessEvent.description ?? businessEvent.event_type ?? 'Business event'}</span>
+                        <small>
+                          {businessEvent.status}
+                          {businessEvent.starts_at ? ` - ${formatDashboardDateTime(businessEvent.starts_at)}` : ''}
+                        </small>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </article>
             </section>
           ) : null}
@@ -722,6 +978,15 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
                   <strong>{onboardingCompletion}%</strong>
                 </div>
                 <progress value={onboardingCompletion} max={100} />
+                {completionTasks.length ? (
+                  <ul>
+                    {completionTasks.map((task) => (
+                      <li key={task}>{task}</li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>Core visibility items are complete. Keep offers, events, and media fresh.</p>
+                )}
               </div>
               <nav className="business-onboarding-steps" aria-label="Business onboarding steps">
                 {businessOnboardingSteps.map((step, index) => (
@@ -1120,6 +1385,8 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
                   <BusinessSignupForm
                     busy={busy}
                     categories={businessCategories}
+                    duplicateMatches={businessDuplicateMatches}
+                    onLogin={() => openAuth('login')}
                     onSubmit={signup}
                   />
                 ) : (
@@ -1137,10 +1404,14 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
 function BusinessSignupForm({
   busy,
   categories,
+  duplicateMatches,
+  onLogin,
   onSubmit,
 }: {
   busy: string | null
   categories: BusinessTaxonomyCategory[]
+  duplicateMatches: BusinessDuplicateMatch[]
+  onLogin: () => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
   return (
@@ -1156,9 +1427,10 @@ function BusinessSignupForm({
         Business name
         <input name="business_name" placeholder="Example: Johri Restaurant" required />
       </label>
+      <BusinessCategoryFields categories={categories} initialCategory="" initialSubcategory="" />
       <label>
-        Business category
-        <BusinessCategorySelect categories={categories} defaultValue="" />
+        Area or city
+        <input name="location" placeholder="Example: Rajouri Garden, New Delhi" />
       </label>
       <label>
         Contact phone
@@ -1172,30 +1444,25 @@ function BusinessSignupForm({
         Password
         <input name="password" minLength={8} placeholder="Password" type="password" required />
       </label>
+      {duplicateMatches.length ? (
+        <div className="business-duplicate-list">
+          {duplicateMatches.map((match) => (
+            <div key={match.business_id}>
+              <strong>{match.business_name}</strong>
+              <span>{match.business_category} - {match.location}</span>
+              <small>{businessVerificationLabel(match.verification_level)}</small>
+            </div>
+          ))}
+          <button className="business-secondary" type="button" onClick={onLogin}>
+            Login to claim
+          </button>
+        </div>
+      ) : null}
       <button className="business-primary" disabled={busy === 'signup'}>
         {busy === 'signup' ? 'Creating account' : 'Continue to dashboard'}
         <ArrowRight size={18} />
       </button>
     </form>
-  )
-}
-
-function BusinessCategorySelect({
-  categories,
-  defaultValue,
-}: {
-  categories: BusinessTaxonomyCategory[]
-  defaultValue: string
-}) {
-  return (
-    <select name="business_category" defaultValue={defaultValue} required>
-      <option value="" disabled>Select category</option>
-      {categories.map((category) => (
-        <option key={category.slug} value={category.name}>
-          {category.name}
-        </option>
-      ))}
-    </select>
   )
 }
 
@@ -2009,6 +2276,22 @@ function findAddressComponent(components: GoogleGeocodeAddressComponent[], type:
   return components.find((component) => component.types.includes(type))?.long_name ?? ''
 }
 
+function formatDashboardDateTime(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleString([], {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+}
+
+function businessVerificationLabel(level: string) {
+  return level.split('_').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
+}
+
 function businessLocationValue(business: BusinessAccount): BusinessLocationValue {
   return {
     location: business.location,
@@ -2127,6 +2410,21 @@ function businessProfileCompleteness(business: BusinessAccount) {
   }).length
 
   return Math.round((completed / checks.length) * 100)
+}
+
+function businessProfileCompletionTasks(business: BusinessAccount) {
+  const tasks = [
+    { done: Boolean(business.business_subcategory), text: 'Choose a precise subcategory.' },
+    { done: Boolean(business.address && business.city && business.area), text: 'Complete your business address.' },
+    { done: Boolean(business.contact_phone || business.whatsapp_number), text: 'Add a public customer contact.' },
+    { done: Boolean(business.opening_hours), text: 'Set structured opening hours.' },
+    { done: Boolean(business.price_range), text: 'Add budget or pricing guidance.' },
+    { done: Boolean(business.description), text: 'Write a clear business description.' },
+    { done: Boolean(business.primary_venue?.experiences?.length), text: 'Add at least one experience users can do.' },
+    { done: Boolean(business.media?.some((item) => item.purpose === 'cover')), text: 'Upload a strong cover image.' },
+  ]
+
+  return tasks.filter((task) => !task.done).slice(0, 3).map((task) => task.text)
 }
 
 function businessOpeningHoursFromForm(form: FormData): BusinessOpeningHour[] {

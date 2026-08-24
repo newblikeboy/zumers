@@ -54,6 +54,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/business/signup", s.withRateLimit("business-auth", 10, 5, s.handleBusinessSignup))
 	s.mux.HandleFunc("POST /api/v1/business/login", s.withRateLimit("business-auth", 20, 5, s.handleBusinessLogin))
 	s.mux.HandleFunc("GET /api/v1/business/taxonomy", s.handleBusinessTaxonomy)
+	s.mux.HandleFunc("POST /api/v1/business/duplicate-check", s.withRateLimit("business-duplicates", 30, 5, s.handleBusinessDuplicateCheck))
+	s.mux.HandleFunc("POST /api/v1/business/claims", s.withBusinessAuth(s.handleBusinessClaimCreate))
 	s.mux.HandleFunc("GET /api/v1/business/me", s.withBusinessAuth(s.handleBusinessMe))
 	s.mux.HandleFunc("PATCH /api/v1/business/me", s.withBusinessAuth(s.handleBusinessUpdate))
 	s.mux.HandleFunc("GET /api/v1/business/dashboard", s.withBusinessAuth(s.handleBusinessDashboard))

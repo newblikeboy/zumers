@@ -52,11 +52,63 @@ Refresh/logout body:
 | POST | `/business/signup` | No | Create a business account |
 | POST | `/business/login` | No | Log in to a business account |
 | GET | `/business/taxonomy` | No | Return controlled business categories, subcategories, and discovery tags |
+| POST | `/business/duplicate-check` | No | Check existing businesses by Google Place ID or name/location before signup |
+| POST | `/business/claims` | Business | Submit a claim request for an existing business |
 | GET | `/business/me` | Business | Return current business profile |
 | PATCH | `/business/me` | Business | Update business profile and onboarding data |
 | POST | `/business/media/sign-upload` | Business | Create a Cloudinary signed upload payload for business onboarding media |
 | GET | `/business/dashboard` | Business | Load business dashboard controls and booking requests |
-| PATCH | `/business/dashboard` | Business | Update today update and live offer controls |
+| PATCH | `/business/dashboard` | Business | Update today update, normalized offers, and events |
+
+Duplicate check body:
+
+```json
+{
+  "business_name": "Johri Restaurant",
+  "location": "Rajouri Garden, New Delhi",
+  "google_place_id": "ChIJ..."
+}
+```
+
+Create claim request body:
+
+```json
+{
+  "existing_business_id": 42,
+  "claimant_name": "Aman Johri",
+  "claimant_phone": "+919999999999",
+  "claimant_note": "I manage this location.",
+  "evidence_url": "https://example.com/proof",
+  "match_source": "name_location"
+}
+```
+
+Dashboard responses include the legacy primary offer fields for compatibility plus normalized `offers` and `events` arrays.
+
+Create or update the primary offer:
+
+```json
+{
+  "offer_id": 12,
+  "offer_title": "20% off lunch buffet",
+  "offer_details": "Valid for dine-in groups before 4 PM.",
+  "offer_valid_until": "2026-09-30",
+  "offer_status": "active"
+}
+```
+
+Create a temporary business event:
+
+```json
+{
+  "event_title": "Live music night",
+  "event_details": "Acoustic set with dinner service.",
+  "event_type": "Live music",
+  "event_starts_at": "2026-09-05T20:00",
+  "event_ends_at": "2026-09-05T23:00",
+  "event_status": "scheduled"
+}
+```
 
 Business profile updates can include discovery fields used later by the user-facing search engine:
 

@@ -13,29 +13,80 @@ import (
 )
 
 type businessSignupRequest struct {
-	Email            string   `json:"email"`
-	Password         string   `json:"password"`
-	BusinessName     string   `json:"business_name"`
-	BusinessCategory string   `json:"business_category"`
-	Location         string   `json:"location"`
-	Address          string   `json:"address"`
-	City             string   `json:"city"`
-	Area             string   `json:"area"`
-	PostalCode       string   `json:"postal_code"`
-	GooglePlaceID    string   `json:"google_place_id"`
-	State            string   `json:"state"`
-	Country          string   `json:"country"`
-	District         string   `json:"district"`
-	Landmark         string   `json:"landmark"`
-	Latitude         *float64 `json:"latitude"`
-	Longitude        *float64 `json:"longitude"`
-	LocationAccuracy *float64 `json:"location_accuracy_meters"`
-	ContactPhone     string   `json:"contact_phone"`
+	Email               string   `json:"email"`
+	Password            string   `json:"password"`
+	BusinessName        string   `json:"business_name"`
+	BusinessCategory    string   `json:"business_category"`
+	BusinessSubcategory string   `json:"business_subcategory"`
+	Location            string   `json:"location"`
+	Address             string   `json:"address"`
+	City                string   `json:"city"`
+	Area                string   `json:"area"`
+	PostalCode          string   `json:"postal_code"`
+	GooglePlaceID       string   `json:"google_place_id"`
+	State               string   `json:"state"`
+	Country             string   `json:"country"`
+	District            string   `json:"district"`
+	Landmark            string   `json:"landmark"`
+	Latitude            *float64 `json:"latitude"`
+	Longitude           *float64 `json:"longitude"`
+	LocationAccuracy    *float64 `json:"location_accuracy_meters"`
+	ContactPhone        string   `json:"contact_phone"`
 }
 
 type businessLoginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+}
+
+type businessDuplicateCheckRequest struct {
+	BusinessName  string `json:"business_name"`
+	Location      string `json:"location"`
+	City          string `json:"city"`
+	Area          string `json:"area"`
+	GooglePlaceID string `json:"google_place_id"`
+}
+
+type businessDuplicateCheckResponse struct {
+	Matches    []businessDuplicateMatch `json:"matches"`
+	ExactMatch bool                     `json:"exact_match"`
+}
+
+type businessDuplicateMatch struct {
+	BusinessID        int64   `json:"business_id"`
+	BusinessName      string  `json:"business_name"`
+	BusinessCategory  string  `json:"business_category"`
+	Location          string  `json:"location"`
+	City              *string `json:"city,omitempty"`
+	Area              *string `json:"area,omitempty"`
+	GooglePlaceID     *string `json:"google_place_id,omitempty"`
+	VerificationLevel string  `json:"verification_level"`
+	MatchType         string  `json:"match_type"`
+	ClaimAvailable    bool    `json:"claim_available"`
+}
+
+type businessClaimRequestCreate struct {
+	ExistingBusinessID int64  `json:"existing_business_id"`
+	ClaimantName       string `json:"claimant_name"`
+	ClaimantPhone      string `json:"claimant_phone"`
+	ClaimantNote       string `json:"claimant_note"`
+	EvidenceURL        string `json:"evidence_url"`
+	MatchSource        string `json:"match_source"`
+}
+
+type businessClaimRequestResponse struct {
+	ID                 int64      `json:"id"`
+	ExistingBusinessID int64      `json:"existing_business_id"`
+	ClaimantBusinessID int64      `json:"claimant_business_id"`
+	ClaimantName       *string    `json:"claimant_name,omitempty"`
+	ClaimantPhone      *string    `json:"claimant_phone,omitempty"`
+	ClaimantNote       *string    `json:"claimant_note,omitempty"`
+	EvidenceURL        *string    `json:"evidence_url,omitempty"`
+	MatchSource        string     `json:"match_source"`
+	Status             string     `json:"status"`
+	ReviewedAt         *time.Time `json:"reviewed_at,omitempty"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 }
 
 type businessUpdateRequest struct {
@@ -179,6 +230,7 @@ type businessResponse struct {
 	Longitude            *float64                      `json:"longitude,omitempty"`
 	LocationAccuracy     *float64                      `json:"location_accuracy_meters,omitempty"`
 	LocationVerified     bool                          `json:"location_verified"`
+	VerificationLevel    string                        `json:"verification_level"`
 	ServiceRadiusKM      *float64                      `json:"service_radius_km,omitempty"`
 	PriceRange           *string                       `json:"price_range,omitempty"`
 	MoodTags             *string                       `json:"mood_tags,omitempty"`
@@ -202,29 +254,30 @@ type businessResponse struct {
 }
 
 type businessVenueResponse struct {
-	ID               int64                             `json:"id"`
-	BusinessID       int64                             `json:"business_id"`
-	VenueName        string                            `json:"venue_name"`
-	IsPrimary        bool                              `json:"is_primary"`
-	Location         string                            `json:"location"`
-	Address          *string                           `json:"address,omitempty"`
-	City             *string                           `json:"city,omitempty"`
-	Area             *string                           `json:"area,omitempty"`
-	PostalCode       *string                           `json:"postal_code,omitempty"`
-	GooglePlaceID    *string                           `json:"google_place_id,omitempty"`
-	State            *string                           `json:"state,omitempty"`
-	Country          *string                           `json:"country,omitempty"`
-	District         *string                           `json:"district,omitempty"`
-	Landmark         *string                           `json:"landmark,omitempty"`
-	Latitude         *float64                          `json:"latitude,omitempty"`
-	Longitude        *float64                          `json:"longitude,omitempty"`
-	LocationAccuracy *float64                          `json:"location_accuracy_meters,omitempty"`
-	LocationVerified bool                              `json:"location_verified"`
-	ServiceRadiusKM  *float64                          `json:"service_radius_km,omitempty"`
-	OpeningHours     *string                           `json:"opening_hours,omitempty"`
-	Status           string                            `json:"status"`
-	Media            []businessMediaResponse           `json:"media"`
-	Experiences      []businessVenueExperienceResponse `json:"experiences"`
+	ID                int64                             `json:"id"`
+	BusinessID        int64                             `json:"business_id"`
+	VenueName         string                            `json:"venue_name"`
+	IsPrimary         bool                              `json:"is_primary"`
+	Location          string                            `json:"location"`
+	Address           *string                           `json:"address,omitempty"`
+	City              *string                           `json:"city,omitempty"`
+	Area              *string                           `json:"area,omitempty"`
+	PostalCode        *string                           `json:"postal_code,omitempty"`
+	GooglePlaceID     *string                           `json:"google_place_id,omitempty"`
+	State             *string                           `json:"state,omitempty"`
+	Country           *string                           `json:"country,omitempty"`
+	District          *string                           `json:"district,omitempty"`
+	Landmark          *string                           `json:"landmark,omitempty"`
+	Latitude          *float64                          `json:"latitude,omitempty"`
+	Longitude         *float64                          `json:"longitude,omitempty"`
+	LocationAccuracy  *float64                          `json:"location_accuracy_meters,omitempty"`
+	LocationVerified  bool                              `json:"location_verified"`
+	VerificationLevel string                            `json:"verification_level"`
+	ServiceRadiusKM   *float64                          `json:"service_radius_km,omitempty"`
+	OpeningHours      *string                           `json:"opening_hours,omitempty"`
+	Status            string                            `json:"status"`
+	Media             []businessMediaResponse           `json:"media"`
+	Experiences       []businessVenueExperienceResponse `json:"experiences"`
 }
 
 const defaultBusinessSignupLocation = "Location not set"
@@ -266,6 +319,25 @@ func (s *Server) handleBusinessSignup(w http.ResponseWriter, r *http.Request) {
 		signupLocation = defaultBusinessSignupLocation
 	}
 
+	duplicates, err := s.findBusinessDuplicates(r.Context(), businessDuplicateCheckRequest{
+		BusinessName:  req.BusinessName,
+		Location:      signupLocation,
+		City:          req.City,
+		Area:          req.Area,
+		GooglePlaceID: req.GooglePlaceID,
+	}, 5)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not check existing businesses")
+		return
+	}
+	if hasExactBusinessDuplicate(duplicates) {
+		writeJSON(w, http.StatusConflict, businessDuplicateCheckResponse{
+			Matches:    duplicates,
+			ExactMatch: true,
+		})
+		return
+	}
+
 	passwordHash, err := security.HashPassword(req.Password)
 	if err != nil {
 		s.logger.Error("business password hash failed", "error", err)
@@ -284,20 +356,21 @@ func (s *Server) handleBusinessSignup(w http.ResponseWriter, r *http.Request) {
 	err = tx.QueryRowContext(
 		r.Context(),
 		`INSERT INTO business_accounts (
-		     email, password_hash, business_name, business_category, location,
+		     email, password_hash, business_name, business_category, business_subcategory, location,
 		     address, city, area, postal_code, google_place_id, state, country, district,
 		     landmark, latitude, longitude, location_accuracy_meters, contact_phone
 		 )
 		 VALUES (
-		     $1, $2, $3, $4, $5, NULLIF($6, ''), NULLIF($7, ''), NULLIF($8, ''),
-		     NULLIF($9, ''), NULLIF($10, ''), NULLIF($11, ''), NULLIF($12, ''),
-		     NULLIF($13, ''), NULLIF($14, ''), $15, $16, $17, NULLIF($18, '')
+		     $1, $2, $3, $4, NULLIF($5, ''), $6, NULLIF($7, ''), NULLIF($8, ''), NULLIF($9, ''),
+		     NULLIF($10, ''), NULLIF($11, ''), NULLIF($12, ''), NULLIF($13, ''),
+		     NULLIF($14, ''), NULLIF($15, ''), $16, $17, $18, NULLIF($19, '')
 		 )
 		 RETURNING id`,
 		req.Email,
 		passwordHash,
 		req.BusinessName,
 		req.BusinessCategory,
+		req.BusinessSubcategory,
 		signupLocation,
 		req.Address,
 		req.City,
@@ -372,6 +445,84 @@ func (s *Server) handleBusinessLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) handleBusinessDuplicateCheck(w http.ResponseWriter, r *http.Request) {
+	var req businessDuplicateCheckRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	normalizeBusinessDuplicateCheck(&req)
+	if req.BusinessName == "" && req.GooglePlaceID == "" {
+		writeError(w, http.StatusBadRequest, "business_name or google_place_id is required")
+		return
+	}
+
+	matches, err := s.findBusinessDuplicates(r.Context(), req, 10)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not check existing businesses")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, businessDuplicateCheckResponse{
+		Matches:    matches,
+		ExactMatch: hasExactBusinessDuplicate(matches),
+	})
+}
+
+func (s *Server) handleBusinessClaimCreate(w http.ResponseWriter, r *http.Request) {
+	var req businessClaimRequestCreate
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	req.ClaimantName = strings.TrimSpace(req.ClaimantName)
+	req.ClaimantPhone = strings.TrimSpace(req.ClaimantPhone)
+	req.ClaimantNote = strings.TrimSpace(req.ClaimantNote)
+	req.EvidenceURL = strings.TrimSpace(req.EvidenceURL)
+	req.MatchSource = strings.TrimSpace(req.MatchSource)
+	if req.MatchSource == "" {
+		req.MatchSource = "manual"
+	}
+	if req.ExistingBusinessID <= 0 {
+		writeError(w, http.StatusBadRequest, "existing_business_id is required")
+		return
+	}
+	if req.ExistingBusinessID == currentBusinessID(r) {
+		writeError(w, http.StatusBadRequest, "cannot claim your own business")
+		return
+	}
+	if req.MatchSource != "google_place_id" && req.MatchSource != "name_location" && req.MatchSource != "manual" {
+		writeError(w, http.StatusBadRequest, "match_source must be google_place_id, name_location, or manual")
+		return
+	}
+
+	exists, err := s.businessExists(r.Context(), req.ExistingBusinessID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not check existing business")
+		return
+	}
+	if !exists {
+		writeError(w, http.StatusNotFound, "business to claim was not found")
+		return
+	}
+
+	if claim, err := s.getPendingBusinessClaim(r.Context(), req.ExistingBusinessID, currentBusinessID(r)); err == nil {
+		writeJSON(w, http.StatusOK, claim)
+		return
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusInternalServerError, "could not check existing claim")
+		return
+	}
+
+	claim, err := s.createBusinessClaim(r.Context(), currentBusinessID(r), req)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not create business claim")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, claim)
 }
 
 func (s *Server) handleBusinessMe(w http.ResponseWriter, r *http.Request) {
@@ -592,7 +743,7 @@ func (s *Server) getBusinessResponse(ctx context.Context, businessID int64) (bus
 		ctx,
 		`SELECT id, email, business_name, business_category, business_subcategory, location,
 		        address, city, area, postal_code, google_place_id, state, country, district, landmark,
-		        latitude, longitude, location_accuracy_meters, location_verified, service_radius_km, price_range,
+		        latitude, longitude, location_accuracy_meters, location_verified, verification_level, service_radius_km, price_range,
 		        mood_tags, service_tags, best_for, facility_tags, website_url, whatsapp_number, contact_phone, description,
 		        offerings, opening_hours, onboarding_status, account_status, created_at, updated_at
 		 FROM business_accounts
@@ -618,6 +769,7 @@ func (s *Server) getBusinessResponse(ctx context.Context, businessID int64) (bus
 		&longitude,
 		&locationAccuracy,
 		&business.LocationVerified,
+		&business.VerificationLevel,
 		&serviceRadiusKM,
 		&priceRange,
 		&moodTags,
@@ -680,6 +832,183 @@ func (s *Server) getBusinessResponse(ctx context.Context, businessID int64) (bus
 	return business, nil
 }
 
+func (s *Server) findBusinessDuplicates(ctx context.Context, req businessDuplicateCheckRequest, limit int) ([]businessDuplicateMatch, error) {
+	normalizeBusinessDuplicateCheck(&req)
+	if limit <= 0 {
+		limit = 10
+	}
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT id, business_name, business_category, location, city, area, google_place_id,
+		        verification_level,
+		        CASE
+		          WHEN $1 <> '' AND google_place_id = $1 THEN 'google_place_id'
+		          ELSE 'name_location'
+		        END AS match_type
+		 FROM business_accounts
+		 WHERE account_status = 'active'
+		   AND (
+		     ($1 <> '' AND google_place_id = $1)
+		     OR (
+		       $2 <> ''
+		       AND lower(business_name) = lower($2)
+		       AND (
+		         (
+		           $3 <> ''
+		           AND (
+		             lower(location) = lower($3)
+		             OR lower(location) LIKE '%' || lower($3) || '%'
+		             OR lower($3) LIKE '%' || lower(location) || '%'
+		           )
+		         )
+		         OR (
+		           $4 <> ''
+		           AND city IS NOT NULL
+		           AND lower(city) = lower($4)
+		           AND ($5 = '' OR (area IS NOT NULL AND lower(area) = lower($5)))
+		         )
+		       )
+		     )
+		   )
+		 ORDER BY CASE WHEN $1 <> '' AND google_place_id = $1 THEN 0 ELSE 1 END,
+		          verification_level DESC,
+		          updated_at DESC
+		 LIMIT $6`,
+		req.GooglePlaceID,
+		req.BusinessName,
+		req.Location,
+		req.City,
+		req.Area,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	matches := make([]businessDuplicateMatch, 0)
+	for rows.Next() {
+		var match businessDuplicateMatch
+		var city, area, googlePlaceID sql.NullString
+		if err := rows.Scan(
+			&match.BusinessID,
+			&match.BusinessName,
+			&match.BusinessCategory,
+			&match.Location,
+			&city,
+			&area,
+			&googlePlaceID,
+			&match.VerificationLevel,
+			&match.MatchType,
+		); err != nil {
+			return nil, err
+		}
+		match.City = nullableString(city)
+		match.Area = nullableString(area)
+		match.GooglePlaceID = nullableString(googlePlaceID)
+		match.ClaimAvailable = true
+		matches = append(matches, match)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return matches, nil
+}
+
+func (s *Server) businessExists(ctx context.Context, businessID int64) (bool, error) {
+	var exists bool
+	err := s.db.QueryRowContext(
+		ctx,
+		`SELECT EXISTS (
+		   SELECT 1 FROM business_accounts
+		   WHERE id = $1 AND account_status = 'active'
+		 )`,
+		businessID,
+	).Scan(&exists)
+
+	return exists, err
+}
+
+func (s *Server) getPendingBusinessClaim(ctx context.Context, existingBusinessID int64, claimantBusinessID int64) (businessClaimRequestResponse, error) {
+	return s.getBusinessClaim(ctx,
+		`SELECT id, existing_business_id, claimant_business_id, claimant_name, claimant_phone,
+		        claimant_note, evidence_url, match_source, status, reviewed_at, created_at, updated_at
+		 FROM business_claim_requests
+		 WHERE existing_business_id = $1 AND claimant_business_id = $2 AND status = 'pending'
+		 LIMIT 1`,
+		existingBusinessID,
+		claimantBusinessID,
+	)
+}
+
+func (s *Server) createBusinessClaim(ctx context.Context, claimantBusinessID int64, req businessClaimRequestCreate) (businessClaimRequestResponse, error) {
+	var claimID int64
+	err := s.db.QueryRowContext(
+		ctx,
+		`INSERT INTO business_claim_requests (
+		     existing_business_id, claimant_business_id, claimant_name, claimant_phone,
+		     claimant_note, evidence_url, match_source
+		 )
+		 VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), $7)
+		 RETURNING id`,
+		req.ExistingBusinessID,
+		claimantBusinessID,
+		req.ClaimantName,
+		req.ClaimantPhone,
+		req.ClaimantNote,
+		req.EvidenceURL,
+		req.MatchSource,
+	).Scan(&claimID)
+	if err != nil {
+		return businessClaimRequestResponse{}, err
+	}
+
+	return s.getBusinessClaimByID(ctx, claimID)
+}
+
+func (s *Server) getBusinessClaimByID(ctx context.Context, claimID int64) (businessClaimRequestResponse, error) {
+	return s.getBusinessClaim(ctx,
+		`SELECT id, existing_business_id, claimant_business_id, claimant_name, claimant_phone,
+		        claimant_note, evidence_url, match_source, status, reviewed_at, created_at, updated_at
+		 FROM business_claim_requests
+		 WHERE id = $1`,
+		claimID,
+	)
+}
+
+func (s *Server) getBusinessClaim(ctx context.Context, query string, args ...any) (businessClaimRequestResponse, error) {
+	var claim businessClaimRequestResponse
+	var claimantName, claimantPhone, claimantNote, evidenceURL sql.NullString
+	var reviewedAt sql.NullTime
+	err := s.db.QueryRowContext(ctx, query, args...).Scan(
+		&claim.ID,
+		&claim.ExistingBusinessID,
+		&claim.ClaimantBusinessID,
+		&claimantName,
+		&claimantPhone,
+		&claimantNote,
+		&evidenceURL,
+		&claim.MatchSource,
+		&claim.Status,
+		&reviewedAt,
+		&claim.CreatedAt,
+		&claim.UpdatedAt,
+	)
+	if err != nil {
+		return businessClaimRequestResponse{}, err
+	}
+	claim.ClaimantName = nullableString(claimantName)
+	claim.ClaimantPhone = nullableString(claimantPhone)
+	claim.ClaimantNote = nullableString(claimantNote)
+	claim.EvidenceURL = nullableString(evidenceURL)
+	if reviewedAt.Valid {
+		claim.ReviewedAt = &reviewedAt.Time
+	}
+
+	return claim, nil
+}
+
 func (s *Server) getPrimaryBusinessVenue(ctx context.Context, businessID int64) (*businessVenueResponse, error) {
 	var venue businessVenueResponse
 	var address, city, area, postalCode, googlePlaceID, state, country, district, landmark, openingHours sql.NullString
@@ -688,7 +1017,7 @@ func (s *Server) getPrimaryBusinessVenue(ctx context.Context, businessID int64) 
 		ctx,
 		`SELECT id, business_id, venue_name, is_primary, location, address, city, area, postal_code,
 		        google_place_id, state, country, district, landmark, latitude, longitude,
-		        location_accuracy_meters, location_verified, service_radius_km, opening_hours, status
+		        location_accuracy_meters, location_verified, verification_level, service_radius_km, opening_hours, status
 		 FROM business_venues
 		 WHERE business_id = $1 AND is_primary = true
 		 LIMIT 1`,
@@ -712,6 +1041,7 @@ func (s *Server) getPrimaryBusinessVenue(ctx context.Context, businessID int64) 
 		&longitude,
 		&locationAccuracy,
 		&venue.LocationVerified,
+		&venue.VerificationLevel,
 		&serviceRadiusKM,
 		&openingHours,
 		&venue.Status,
@@ -1059,12 +1389,12 @@ func (s *Server) syncPrimaryBusinessVenue(ctx context.Context, tx *sql.Tx, busin
 		`INSERT INTO business_venues (
 		     business_id, venue_name, is_primary, location, address, city, area, postal_code,
 		     google_place_id, state, country, district, landmark, latitude, longitude,
-		     location_accuracy_meters, location_verified, service_radius_km, opening_hours, status
+		     location_accuracy_meters, location_verified, verification_level, service_radius_km, opening_hours, status
 		 )
 		 SELECT
 		     id, business_name, true, location, address, city, area, postal_code,
 		     google_place_id, state, country, district, landmark, latitude, longitude,
-		     location_accuracy_meters, location_verified, service_radius_km, opening_hours,
+		     location_accuracy_meters, location_verified, verification_level, service_radius_km, opening_hours,
 		     CASE WHEN account_status = 'active' THEN 'active' ELSE 'inactive' END
 		 FROM business_accounts
 		 WHERE id = $1
@@ -1085,6 +1415,7 @@ func (s *Server) syncPrimaryBusinessVenue(ctx context.Context, tx *sql.Tx, busin
 		     longitude = EXCLUDED.longitude,
 		     location_accuracy_meters = EXCLUDED.location_accuracy_meters,
 		     location_verified = EXCLUDED.location_verified,
+		     verification_level = EXCLUDED.verification_level,
 		     service_radius_km = EXCLUDED.service_radius_km,
 		     opening_hours = EXCLUDED.opening_hours,
 		     status = EXCLUDED.status,
@@ -1407,6 +1738,24 @@ func normalizeBusinessSignup(req *businessSignupRequest) {
 	req.District = strings.TrimSpace(req.District)
 	req.Landmark = strings.TrimSpace(req.Landmark)
 	req.ContactPhone = strings.TrimSpace(req.ContactPhone)
+}
+
+func normalizeBusinessDuplicateCheck(req *businessDuplicateCheckRequest) {
+	req.BusinessName = strings.TrimSpace(req.BusinessName)
+	req.Location = strings.TrimSpace(req.Location)
+	req.City = strings.TrimSpace(req.City)
+	req.Area = strings.TrimSpace(req.Area)
+	req.GooglePlaceID = strings.TrimSpace(req.GooglePlaceID)
+}
+
+func hasExactBusinessDuplicate(matches []businessDuplicateMatch) bool {
+	for _, match := range matches {
+		if match.MatchType == "google_place_id" {
+			return true
+		}
+	}
+
+	return false
 }
 
 func validateBusinessSignup(req businessSignupRequest) error {

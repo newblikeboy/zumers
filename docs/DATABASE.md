@@ -44,6 +44,10 @@ go run ./cmd/migrate validate
 | `conversations` | One-to-one friend chat containers |
 | `messages` | Chat message records |
 | `notifications` | Friend, message, and post activity notifications |
+| `business_dashboard_controls` | Business freshness message and dashboard metrics |
+| `business_offers` | Normalized business discounts, deals, pricing windows, and offer status |
+| `business_events` | Temporary business happenings such as live music, workshops, screenings, and festivals |
+| `business_claim_requests` | Ownership claim requests for existing business records |
 
 ## Design Notes
 

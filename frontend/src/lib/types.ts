@@ -45,6 +45,7 @@ export type BusinessAccount = {
   longitude?: number
   location_accuracy_meters?: number
   location_verified: boolean
+  verification_level?: BusinessVerificationLevel
   service_radius_km?: number
   price_range?: 'budget' | 'moderate' | 'premium' | 'luxury'
   mood_tags?: string
@@ -86,6 +87,7 @@ export type BusinessVenue = {
   longitude?: number
   location_accuracy_meters?: number
   location_verified: boolean
+  verification_level?: BusinessVerificationLevel
   service_radius_km?: number
   opening_hours?: string
   status: 'active' | 'inactive'
@@ -137,6 +139,46 @@ export type BusinessOpeningHour = {
   closes_at?: string
 }
 
+export type BusinessVerificationLevel =
+  | 'unverified'
+  | 'phone_verified'
+  | 'location_verified'
+  | 'ownership_verified'
+  | 'zumers_verified'
+
+export type BusinessDuplicateMatch = {
+  business_id: number
+  business_name: string
+  business_category: string
+  location: string
+  city?: string
+  area?: string
+  google_place_id?: string
+  verification_level: BusinessVerificationLevel
+  match_type: 'google_place_id' | 'name_location'
+  claim_available: boolean
+}
+
+export type BusinessDuplicateCheckResponse = {
+  matches: BusinessDuplicateMatch[]
+  exact_match: boolean
+}
+
+export type BusinessClaimRequest = {
+  id: number
+  existing_business_id: number
+  claimant_business_id: number
+  claimant_name?: string
+  claimant_phone?: string
+  claimant_note?: string
+  evidence_url?: string
+  match_source: 'google_place_id' | 'name_location' | 'manual'
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled'
+  reviewed_at?: string
+  created_at: string
+  updated_at: string
+}
+
 export type BusinessAuthResponse = {
   access_token: string
   access_token_expires_at: string
@@ -180,13 +222,56 @@ export type BusinessBookingRequest = {
   updated_at: string
 }
 
+export type BusinessOffer = {
+  id: number
+  business_id: number
+  venue_id?: number
+  title: string
+  description?: string
+  original_price?: number
+  offer_price?: number
+  discount_percent?: number
+  discount_amount?: number
+  starts_on?: string
+  ends_on?: string
+  starts_at?: string
+  ends_at?: string
+  applicable_days?: string
+  terms?: string
+  target_audience?: string
+  status: 'draft' | 'active' | 'paused' | 'expired'
+  click_count: number
+  created_at: string
+  updated_at: string
+}
+
+export type BusinessEvent = {
+  id: number
+  business_id: number
+  venue_id?: number
+  title: string
+  description?: string
+  event_type?: string
+  starts_at?: string
+  ends_at?: string
+  price_min?: number
+  price_max?: number
+  booking_required: boolean
+  target_audience?: string
+  terms?: string
+  status: 'draft' | 'scheduled' | 'active' | 'cancelled' | 'completed'
+  created_at: string
+  updated_at: string
+}
+
 export type BusinessDashboard = {
+  offer_id?: number
   today_update?: string
   today_highlight?: string
   offer_title?: string
   offer_details?: string
   offer_valid_until?: string
-  offer_status: 'draft' | 'active' | 'paused'
+  offer_status: 'draft' | 'active' | 'paused' | 'expired'
   offer_clicks: number
   profile_visits: number
   booking_clicks: number
@@ -194,6 +279,18 @@ export type BusinessDashboard = {
   saves: number
   updated_at: string
   bookings: BusinessBookingRequest[]
+  offers?: BusinessOffer[]
+  events?: BusinessEvent[]
+}
+
+export type BusinessDashboardUpdate = Partial<BusinessDashboard> & {
+  event_id?: number
+  event_title?: string
+  event_details?: string
+  event_type?: string
+  event_starts_at?: string
+  event_ends_at?: string
+  event_status?: BusinessEvent['status']
 }
 
 export type PostMediaInput = {
