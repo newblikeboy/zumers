@@ -12,6 +12,7 @@ import type {
   CloudinarySignature,
   Conversation,
   Comment,
+  DiscoverySearchResponse,
   FriendRequest,
   FriendSuggestion,
   Message,
@@ -255,6 +256,22 @@ export const api = {
     apiRequest<{ status: string }>(`/notifications/${id}/read`, {
       method: 'POST',
     }),
+
+  discoverySearch: (params: {
+    query?: string
+    chips?: string[]
+    latitude?: number
+    longitude?: number
+    limit?: number
+  }) => {
+    const query = new URLSearchParams()
+    if (params.query) query.set('q', params.query)
+    if (params.chips?.length) query.set('chips', params.chips.join(','))
+    if (typeof params.latitude === 'number') query.set('latitude', String(params.latitude))
+    if (typeof params.longitude === 'number') query.set('longitude', String(params.longitude))
+    if (params.limit) query.set('limit', String(params.limit))
+    return apiRequest<DiscoverySearchResponse>(`/discovery/search?${query.toString()}`)
+  },
 }
 
 async function businessApiRequest<T>(

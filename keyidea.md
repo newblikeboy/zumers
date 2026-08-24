@@ -907,6 +907,7 @@ This future feature should influence database design now, especially around venu
 
 ### Phase 10: User-facing Discovery API
 
+- Status: Complete for the first rule-based user discovery model. Added `/api/v1/discovery/search`, which parses natural-language intent and quick chips into category, mood, service, audience, budget, time, group-size, open-now, and location signals. The user app global search now opens a discovery overlay and returns ranked things-to-do cards from businesses, primary venues, venue experiences, active offers, and upcoming events.
 - Add discovery search endpoint.
 - Input should support location, mood, group size, budget, duration, time, and indoor/outdoor.
 - Initial ranking can be rule-based.

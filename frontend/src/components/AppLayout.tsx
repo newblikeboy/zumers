@@ -3,26 +3,51 @@ import {
   Check,
   ChevronDown,
   Clapperboard,
+  Clock,
+  IndianRupee,
+  LocateFixed,
   LogOut,
+  MapPin,
   MessageCircle,
   MoreHorizontal,
   Newspaper,
   Search,
+  Sparkles,
+  Tags,
   User as UserIcon,
   Users,
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import type { FormEvent } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { api } from '../lib/api'
-import type { Conversation, FriendRequest, NotificationItem, User } from '../lib/types'
+import type {
+  Conversation,
+  DiscoverySearchResult,
+  FriendRequest,
+  NotificationItem,
+  User,
+} from '../lib/types'
 
 const navItems = [
   { to: '/', label: 'Feed', icon: Newspaper },
   { to: '/reels', label: 'Reels', icon: Clapperboard },
   { to: '/profile', label: 'Profile', icon: UserIcon },
   { to: '/friends', label: 'Friends', icon: Users },
+]
+
+const discoveryChips = [
+  'Food nearby',
+  'Fun tonight',
+  'Date plan',
+  'Friends',
+  'Family',
+  'Open now',
+  'Under 1000',
+  'Events today',
+  'Peaceful',
 ]
 
 export function AppLayout() {
@@ -46,6 +71,7 @@ export function AppLayout() {
   const [notificationLoading, setNotificationLoading] = useState(false)
   const [notificationError, setNotificationError] = useState<string | null>(null)
   const [notificationBusy, setNotificationBusy] = useState<string | null>(null)
+  const [discoveryOpen, setDiscoveryOpen] = useState(false)
 
   async function loadNotifications() {
     const [notificationResponse, requestResponse] = await Promise.all([
@@ -65,6 +91,7 @@ export function AppLayout() {
   useEffect(() => {
     setNotificationOpen(false)
     setProfileMenuOpen(false)
+    setDiscoveryOpen(false)
   }, [location.pathname])
 
   useEffect(() => {
@@ -226,14 +253,19 @@ export function AppLayout() {
       <header className="topbar">
         <div className="topbar-left">
           <div className="brand-mark">Z</div>
-          <NavLink
-            aria-label="Open people search"
+          <button
+            aria-label="Open discovery search"
             className="search-pill search-link"
-            to="/friends"
+            type="button"
+            onClick={() => {
+              setDiscoveryOpen(true)
+              setNotificationOpen(false)
+              setProfileMenuOpen(false)
+            }}
           >
             <Search size={18} />
-            <span>Search Zumers</span>
-          </NavLink>
+            <span>What can we do?</span>
+          </button>
         </div>
 
         <nav className="topbar-tabs" aria-label="Primary sections">
@@ -464,6 +496,10 @@ export function AppLayout() {
         <Outlet />
       </main>
 
+      {discoveryOpen ? (
+        <DiscoverySearchOverlay onClose={() => setDiscoveryOpen(false)} />
+      ) : null}
+
       {showRightRail ? (
         <aside className="right-rail" aria-label="Social activity">
           <section className="right-rail-section desktop-only">
@@ -553,6 +589,229 @@ export function AppLayout() {
       ) : null}
     </div>
   )
+}
+
+function DiscoverySearchOverlay({ onClose }: { onClose: () => void }) {
+  const [query, setQuery] = useState('')
+  const [selectedChips, setSelectedChips] = useState<string[]>([])
+  const [results, setResults] = useState<DiscoverySearchResult[]>([])
+  const [searched, setSearched] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null)
+  const [locationBusy, setLocationBusy] = useState(false)
+  const [locationError, setLocationError] = useState<string | null>(null)
+
+  async function search(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault()
+    setLoading(true)
+    setError(null)
+    setSearched(true)
+    try {
+      const response = await api.discoverySearch({
+        query,
+        chips: selectedChips,
+        latitude: location?.latitude,
+        longitude: location?.longitude,
+        limit: 20,
+      })
+      setResults(response.results)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not search plans')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function toggleChip(chip: string) {
+    setSelectedChips((current) =>
+      current.includes(chip)
+        ? current.filter((item) => item !== chip)
+        : [...current, chip],
+    )
+  }
+
+  function useCurrentLocation() {
+    setLocationError(null)
+    if (!navigator.geolocation) {
+      setLocationError('Location is not available in this browser')
+      return
+    }
+    setLocationBusy(true)
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        })
+        setLocationBusy(false)
+      },
+      () => {
+        setLocationError('Could not read current location')
+        setLocationBusy(false)
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    )
+  }
+
+  return (
+    <div className="discovery-overlay" role="dialog" aria-modal="true" aria-label="Discovery search">
+      <section className="discovery-modal">
+        <div className="discovery-header">
+          <div>
+            <span><Sparkles size={16} /> Zumers Search</span>
+            <h2>What can we do?</h2>
+          </div>
+          <button className="icon-button quiet" type="button" aria-label="Close search" onClick={onClose}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <form className="discovery-search-form" onSubmit={search}>
+          <label>
+            <Search size={19} />
+            <input
+              autoFocus
+              placeholder="momos near me, fun tonight, peaceful place for 2"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+          <button className="primary-button" disabled={loading} type="submit">
+            {loading ? 'Searching' : 'Search'}
+          </button>
+        </form>
+
+        <div className="discovery-toolbar">
+          <div className="discovery-chip-row" aria-label="Discovery filters">
+            {discoveryChips.map((chip) => (
+              <button
+                className={selectedChips.includes(chip) ? 'active' : ''}
+                key={chip}
+                type="button"
+                onClick={() => toggleChip(chip)}
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+          <button
+            className={location ? 'discovery-location active' : 'discovery-location'}
+            disabled={locationBusy}
+            type="button"
+            onClick={useCurrentLocation}
+          >
+            <LocateFixed size={17} />
+            <span>{location ? 'Location on' : locationBusy ? 'Locating' : 'Use location'}</span>
+          </button>
+        </div>
+
+        {locationError ? <div className="inline-error">{locationError}</div> : null}
+        {error ? <div className="inline-error">{error}</div> : null}
+
+        <div className="discovery-results">
+          {loading ? (
+            <div className="discovery-state">Searching plans</div>
+          ) : null}
+          {!loading && !searched ? (
+            <div className="discovery-suggestions">
+              {['street food under 500', 'bowling for 4 friends', 'date cafe tonight', 'events today nearby'].map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => {
+                    setQuery(item)
+                    setSearched(false)
+                  }}
+                >
+                  <Search size={16} />
+                  <span>{item}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {!loading && searched && results.length === 0 ? (
+            <div className="discovery-state">No matching plans found</div>
+          ) : null}
+          {!loading && results.length > 0 ? (
+            <div className="discovery-result-list">
+              {results.map((result) => (
+                <DiscoveryResultCard key={result.id} result={result} />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function DiscoveryResultCard({ result }: { result: DiscoverySearchResult }) {
+  const price = discoveryPriceLabel(result)
+  const duration = result.typical_duration_minutes
+    ? `${Math.round(result.typical_duration_minutes / 60 * 10) / 10} hr`
+    : null
+  const location = [result.area, result.city].filter(Boolean).join(', ') || result.location
+
+  return (
+    <article className="discovery-result-card">
+      {result.image_url ? (
+        <img src={result.image_url} alt="" />
+      ) : (
+        <div className="discovery-result-image">
+          <Sparkles size={24} />
+        </div>
+      )}
+      <div className="discovery-result-body">
+        <div className="discovery-result-heading">
+          <div>
+            <span>{result.result_type === 'experience' ? 'Experience' : 'Place'}</span>
+            <h3>{result.title}</h3>
+          </div>
+          {result.open_now ? <strong>Open</strong> : null}
+        </div>
+        <p>{result.business_name}</p>
+        <div className="discovery-result-meta">
+          <span><MapPin size={15} /> {result.distance_km ? `${result.distance_km} km` : location}</span>
+          {price ? <span><IndianRupee size={15} /> {price}</span> : null}
+          {duration ? <span><Clock size={15} /> {duration}</span> : null}
+          <span><Tags size={15} /> {result.subcategory ?? result.category}</span>
+        </div>
+        {result.active_offer_title || result.next_event_title ? (
+          <div className="discovery-signal-row">
+            {result.active_offer_title ? <span>{result.active_offer_title}</span> : null}
+            {result.next_event_title ? <span>{result.next_event_title}</span> : null}
+          </div>
+        ) : null}
+        <div className="discovery-reasons">
+          {result.reasons.slice(0, 3).map((reason) => (
+            <span key={reason}>{reason}</span>
+          ))}
+        </div>
+      </div>
+    </article>
+  )
+}
+
+function discoveryPriceLabel(result: DiscoverySearchResult) {
+  if (typeof result.average_price_per_person === 'number') {
+    return `${Math.round(result.average_price_per_person)}/person`
+  }
+  if (typeof result.starting_price === 'number') {
+    return `from ${Math.round(result.starting_price)}`
+  }
+  switch (result.price_range) {
+    case 'budget':
+      return 'Budget'
+    case 'moderate':
+      return 'Moderate'
+    case 'premium':
+      return 'Premium'
+    case 'luxury':
+      return 'Luxury'
+    default:
+      return null
+  }
 }
 
 export function Avatar({ name, src }: { name: string; src?: string }) {

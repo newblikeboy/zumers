@@ -45,6 +45,23 @@ Refresh/logout body:
 }
 ```
 
+## Discovery
+
+| Method | Endpoint | Auth | Purpose |
+| --- | --- | --- | --- |
+| GET | `/discovery/search` | Yes | Search structured business, venue, experience, offer, and event data as user-facing things to do |
+
+Query parameters:
+
+| Name | Purpose |
+| --- | --- |
+| `q` | Natural-language intent, for example `momos near me`, `fun tonight`, or `date cafe under 1000` |
+| `chips` | Comma-separated quick filters such as `Open now,Friends,Under 1000` |
+| `latitude` / `longitude` | Optional user location for distance scoring |
+| `limit` | Result count, capped by the API |
+
+The response includes interpreted categories, moods, services, audiences, budget, group size, duration, and ranked result cards.
+
 ## Business
 
 | Method | Endpoint | Auth | Purpose |

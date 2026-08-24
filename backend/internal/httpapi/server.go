@@ -63,6 +63,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/business/media/sign-upload", s.withBusinessAuth(s.withRateLimit("business-uploads", 20, 5, s.handleCloudinarySignUpload)))
 
 	s.mux.HandleFunc("GET /api/v1/users/search", s.withAuth(s.handleUserSearch))
+	s.mux.HandleFunc("GET /api/v1/discovery/search", s.withAuth(s.withRateLimit("discovery-search", 60, 20, s.handleDiscoverySearch)))
 	s.mux.HandleFunc("GET /api/v1/users/{id}", s.withAuth(s.handleProfileView))
 	s.mux.HandleFunc("PATCH /api/v1/me/profile", s.withAuth(s.handleProfileUpdate))
 

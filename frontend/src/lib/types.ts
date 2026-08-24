@@ -293,6 +293,65 @@ export type BusinessDashboardUpdate = Partial<BusinessDashboard> & {
   event_status?: BusinessEvent['status']
 }
 
+export type DiscoverySearchIntent = {
+  categories: string[]
+  moods: string[]
+  services: string[]
+  audiences: string[]
+  open_now: boolean
+  latitude?: number
+  longitude?: number
+  budget?: number
+  group_size?: number
+  duration_minutes?: number
+}
+
+export type DiscoverySearchResult = {
+  id: string
+  result_type: 'experience' | 'venue'
+  business_id: number
+  venue_id?: number
+  experience_id?: number
+  title: string
+  business_name: string
+  category: string
+  subcategory?: string
+  location: string
+  city?: string
+  area?: string
+  distance_km?: number
+  open_now: boolean
+  price_range?: 'budget' | 'moderate' | 'premium' | 'luxury'
+  starting_price?: number
+  average_price_per_person?: number
+  typical_duration_minutes?: number
+  min_group_size?: number
+  max_group_size?: number
+  indoor_outdoor?: 'indoor' | 'outdoor' | 'both'
+  description?: string
+  tags?: string
+  mood_tags?: string
+  service_tags?: string
+  best_for?: string
+  image_url?: string
+  active_offer_title?: string
+  next_event_title?: string
+  booking_required: boolean
+  walk_in_available: boolean
+  contact_phone?: string
+  whatsapp_number?: string
+  website_url?: string
+  verification_level: BusinessVerificationLevel
+  score: number
+  reasons: string[]
+}
+
+export type DiscoverySearchResponse = {
+  query: string
+  interpreted: DiscoverySearchIntent
+  results: DiscoverySearchResult[]
+}
+
 export type PostMediaInput = {
   media_type: 'image' | 'video'
   cloudinary_public_id: string
