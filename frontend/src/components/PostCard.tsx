@@ -1,11 +1,11 @@
 import {
   Globe2,
+  Heart,
   LockKeyhole,
   MessageCircle,
   MoreHorizontal,
   Repeat2,
   Send,
-  ThumbsUp,
   Trash2,
   Users,
   X,
@@ -50,8 +50,6 @@ export function PostCard({
   const [commentBusy, setCommentBusy] = useState(false)
   const [shareBusy, setShareBusy] = useState(false)
   const timestamp = useMemo(() => formatRelativeTime(post.created_at), [post.created_at])
-  const reaction = reactions.find((item) => item.type === post.viewer_reaction)
-  const reactionLabel = reaction?.label ?? 'Like'
 
   useEffect(() => {
     if (!commentsOpen) return
@@ -76,13 +74,16 @@ export function PostCard({
 
   async function setReaction(reactionType: string) {
     if (busy) return
+    const previousPost = post
     setBusy(true)
     setError(null)
     setReactionDockOpen(false)
+    onPostChange?.(optimisticPostReaction(post, reactionType))
     try {
       const updated = await api.reactToPost(post.id, reactionType)
       onPostChange?.(updated)
     } catch (err) {
+      onPostChange?.(previousPost)
       setError(err instanceof Error ? err.message : 'Could not update reaction')
     } finally {
       setBusy(false)
@@ -90,12 +91,15 @@ export function PostCard({
   }
 
   async function clearReaction() {
+    const previousPost = post
     setBusy(true)
     setError(null)
+    onPostChange?.(optimisticPostReaction(post, undefined))
     try {
       const updated = await api.removePostReaction(post.id)
       onPostChange?.(updated)
     } catch (err) {
+      onPostChange?.(previousPost)
       setError(err instanceof Error ? err.message : 'Could not update reaction')
     } finally {
       setBusy(false)
@@ -199,8 +203,8 @@ export function PostCard({
 
       <div className="engagement-summary">
         <span className="reaction-count">
-          <ThumbsUp size={13} />
-          {countLabel(post.like_count, 'reaction')}
+          <Heart size={13} fill="currentColor" />
+          {post.like_count}
         </span>
         <button onClick={() => setCommentsOpen((value) => !value)}>
           {countLabel(post.comment_count, 'comment')}
@@ -235,9 +239,10 @@ export function PostCard({
             }
             disabled={busy}
             onClick={toggleLike}
+            aria-label={post.viewer_reaction ? 'Remove reaction' : 'Like post'}
+            title={post.viewer_reaction ? 'Remove reaction' : 'Like post'}
           >
-            <ThumbsUp size={19} />
-            <span>{post.viewer_reaction ? reactionLabel : 'Like'}</span>
+            <Heart size={20} fill={post.viewer_reaction ? 'currentColor' : 'none'} />
           </button>
         </div>
         <button
@@ -344,6 +349,19 @@ function SharedPostPreview({ post, compact = false }: { post: Post; compact?: bo
       <MediaGrid media={post.media ?? []} compact />
     </div>
   )
+}
+
+function optimisticPostReaction(post: Post, reactionType?: string): Post {
+  const hadReaction = Boolean(post.viewer_reaction)
+  const nextCount = reactionType
+    ? post.like_count + (hadReaction ? 0 : 1)
+    : Math.max(0, post.like_count - (hadReaction ? 1 : 0))
+
+  return {
+    ...post,
+    like_count: nextCount,
+    viewer_reaction: reactionType,
+  }
 }
 
 function MediaGrid({ media, compact = false }: { media: PostMedia[]; compact?: boolean }) {

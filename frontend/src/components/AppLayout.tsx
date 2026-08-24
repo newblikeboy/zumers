@@ -1,9 +1,12 @@
 import {
   Bell,
+  Bookmark,
+  CalendarCheck,
   Check,
   ChevronDown,
   Clapperboard,
   Clock,
+  Heart,
   IndianRupee,
   LocateFixed,
   LogOut,
@@ -12,6 +15,7 @@ import {
   MoreHorizontal,
   Newspaper,
   Search,
+  Share2,
   Sparkles,
   Tags,
   User as UserIcon,
@@ -48,6 +52,16 @@ const discoveryChips = [
   'Under 1000',
   'Events today',
   'Peaceful',
+]
+
+const discoveryRecentSearchesKey = 'zumers.discoveryRecentSearches'
+const discoverySavedBusinessesKey = 'zumers.discoverySavedBusinesses'
+const pendingBusinessShareKey = 'zumers.pendingBusinessShare'
+const discoveryFallbackSearches = [
+  'street food under 500',
+  'bowling for 4 friends',
+  'date cafe tonight',
+  'events today nearby',
 ]
 
 export function AppLayout() {
@@ -594,6 +608,7 @@ export function AppLayout() {
 function DiscoverySearchOverlay({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState('')
   const [selectedChips, setSelectedChips] = useState<string[]>([])
+  const [recentSearches, setRecentSearches] = useState<string[]>(() => loadDiscoveryRecentSearches())
   const [results, setResults] = useState<DiscoverySearchResult[]>([])
   const [searched, setSearched] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -602,8 +617,17 @@ function DiscoverySearchOverlay({ onClose }: { onClose: () => void }) {
   const [locationBusy, setLocationBusy] = useState(false)
   const [locationError, setLocationError] = useState<string | null>(null)
 
+  useEffect(() => {
+    document.body.classList.add('modal-scroll-lock')
+    return () => document.body.classList.remove('modal-scroll-lock')
+  }, [])
+
   async function search(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault()
+    const trimmedQuery = query.trim()
+    if (trimmedQuery) {
+      setRecentSearches(saveDiscoveryRecentSearch(trimmedQuery))
+    }
     setLoading(true)
     setError(null)
     setSearched(true)
@@ -714,20 +738,23 @@ function DiscoverySearchOverlay({ onClose }: { onClose: () => void }) {
             <div className="discovery-state">Searching plans</div>
           ) : null}
           {!loading && !searched ? (
-            <div className="discovery-suggestions">
-              {['street food under 500', 'bowling for 4 friends', 'date cafe tonight', 'events today nearby'].map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => {
-                    setQuery(item)
-                    setSearched(false)
-                  }}
-                >
-                  <Search size={16} />
-                  <span>{item}</span>
-                </button>
-              ))}
+            <div className="discovery-suggestion-panel">
+              <span>{recentSearches.length ? 'Recent searches' : 'Try searching'}</span>
+              <div className="discovery-suggestions">
+                {(recentSearches.length ? recentSearches : discoveryFallbackSearches).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => {
+                      setQuery(item)
+                      setSearched(false)
+                    }}
+                  >
+                    <Search size={16} />
+                    <span>{item}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           ) : null}
           {!loading && searched && results.length === 0 ? (
@@ -747,35 +774,149 @@ function DiscoverySearchOverlay({ onClose }: { onClose: () => void }) {
 }
 
 function DiscoveryResultCard({ result }: { result: DiscoverySearchResult }) {
+  const { user } = useAuth()
   const price = discoveryPriceLabel(result)
   const duration = result.typical_duration_minutes
     ? `${Math.round(result.typical_duration_minutes / 60 * 10) / 10} hr`
     : null
   const location = [result.area, result.city].filter(Boolean).join(', ') || result.location
+  const [saved, setSaved] = useState(() => loadDiscoverySavedBusinesses().includes(result.business_id))
+  const [actionStatus, setActionStatus] = useState<string | null>(null)
+  const [liked, setLiked] = useState(() => result.liked_by_me ?? false)
+  const [likesCount, setLikesCount] = useState(() => result.likes_received ?? 0)
+  const [likeBusy, setLikeBusy] = useState(false)
+  const [bookingOpen, setBookingOpen] = useState(false)
+  const [bookingName, setBookingName] = useState(() => user?.display_name ?? '')
+  const [bookingContact, setBookingContact] = useState(() => user?.email ?? '')
+  const [bookingTime, setBookingTime] = useState('')
+  const [bookingNote, setBookingNote] = useState('')
+  const [bookingBusy, setBookingBusy] = useState(false)
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (!bookingName && user?.display_name) setBookingName(user.display_name)
+    if (!bookingContact && user?.email) setBookingContact(user.email)
+  }, [bookingContact, bookingName, user?.display_name, user?.email])
+
+  async function toggleLike() {
+    if (likeBusy) return
+    const previousLiked = liked
+    const previousCount = likesCount
+    const nextLiked = !previousLiked
+    setLikeBusy(true)
+    setActionStatus(null)
+    setLiked(nextLiked)
+    setLikesCount(Math.max(0, previousCount + (nextLiked ? 1 : -1)))
+    try {
+      const response = previousLiked
+        ? await api.removeBusinessLike(result.business_id)
+        : await api.likeBusiness(result.business_id)
+      setLiked(response.liked)
+      setLikesCount(response.likes_received)
+    } catch (err) {
+      setLiked(previousLiked)
+      setLikesCount(previousCount)
+      setActionStatus(err instanceof Error ? err.message : 'Could not update like')
+    } finally {
+      setLikeBusy(false)
+    }
+  }
+
+  function shareResult() {
+    setActionStatus(null)
+    try {
+      sessionStorage.setItem(
+        pendingBusinessShareKey,
+        JSON.stringify(discoverySharePayload(result, price, duration, location)),
+      )
+      navigate('/chat?share=business')
+    } catch {
+      setActionStatus('Could not open share')
+    }
+  }
+
+  function toggleSave() {
+    const next = toggleDiscoverySavedBusiness(result.business_id)
+    const isSaved = next.includes(result.business_id)
+    setSaved(isSaved)
+    setActionStatus(isSaved ? 'Saved' : 'Removed')
+  }
+
+  function bookResult() {
+    setActionStatus(null)
+    setBookingOpen((value) => !value)
+  }
+
+  async function submitBooking(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const requesterName = bookingName.trim()
+    if (!requesterName) {
+      setActionStatus('Name is required')
+      return
+    }
+
+    let bookingTimestamp: string | undefined
+    if (bookingTime) {
+      const parsed = new Date(bookingTime)
+      if (Number.isNaN(parsed.getTime())) {
+        setActionStatus('Choose a valid time')
+        return
+      }
+      bookingTimestamp = parsed.toISOString()
+    }
+
+    setBookingBusy(true)
+    setActionStatus(null)
+    try {
+      await api.createBusinessBooking(result.business_id, {
+        requester_name: requesterName,
+        requester_contact: bookingContact.trim() || undefined,
+        booking_note: bookingNote.trim() || `Booking request for ${result.title}`,
+        booking_time: bookingTimestamp,
+      })
+      setBookingOpen(false)
+      setBookingTime('')
+      setBookingNote('')
+      setActionStatus('Booking request sent')
+    } catch (err) {
+      setActionStatus(err instanceof Error ? err.message : 'Could not send booking')
+    } finally {
+      setBookingBusy(false)
+    }
+  }
 
   return (
     <article className="discovery-result-card">
-      {result.image_url ? (
-        <img src={result.image_url} alt="" />
-      ) : (
-        <div className="discovery-result-image">
-          <Sparkles size={24} />
+      <div className="discovery-result-media">
+        {result.image_url ? (
+          <img src={result.image_url} alt="" />
+        ) : (
+          <div className="discovery-result-image">
+            <Sparkles size={24} />
+          </div>
+        )}
+        <div className="discovery-media-badge">
+          {result.result_type === 'experience' ? 'Experience' : 'Place'}
         </div>
-      )}
+      </div>
       <div className="discovery-result-body">
         <div className="discovery-result-heading">
           <div>
-            <span>{result.result_type === 'experience' ? 'Experience' : 'Place'}</span>
+            <span>{result.subcategory ?? result.category}</span>
             <h3>{result.title}</h3>
           </div>
           {result.open_now ? <strong>Open</strong> : null}
         </div>
-        <p>{result.business_name}</p>
+        <div className="discovery-business-line">
+          <p>{result.business_name}</p>
+          {result.verification_level !== 'unverified' ? <span><Check size={13} /> Verified</span> : null}
+        </div>
+        {result.description ? <p className="discovery-description">{result.description}</p> : null}
         <div className="discovery-result-meta">
           <span><MapPin size={15} /> {result.distance_km ? `${result.distance_km} km` : location}</span>
           {price ? <span><IndianRupee size={15} /> {price}</span> : null}
           {duration ? <span><Clock size={15} /> {duration}</span> : null}
-          <span><Tags size={15} /> {result.subcategory ?? result.category}</span>
+          <span><Tags size={15} /> {result.booking_required ? 'Booking' : result.walk_in_available ? 'Walk-in' : result.category}</span>
         </div>
         {result.active_offer_title || result.next_event_title ? (
           <div className="discovery-signal-row">
@@ -788,6 +929,96 @@ function DiscoveryResultCard({ result }: { result: DiscoverySearchResult }) {
             <span key={reason}>{reason}</span>
           ))}
         </div>
+        <div className="discovery-actions">
+          <button
+            type="button"
+            className="discovery-action-button discovery-like-button"
+            aria-label={liked ? 'Unlike business' : 'Like business'}
+            title={liked ? 'Unlike business' : 'Like business'}
+            onClick={toggleLike}
+            disabled={likeBusy}
+          >
+            <Heart size={20} fill={liked ? 'currentColor' : 'none'} />
+            <span>{compactDiscoveryCount(likesCount)}</span>
+          </button>
+          <button
+            type="button"
+            className="discovery-action-button discovery-action-primary"
+            aria-label="Book now"
+            title="Book now"
+            onClick={bookResult}
+          >
+            <CalendarCheck size={20} />
+          </button>
+          <button
+            type="button"
+            className="discovery-action-button"
+            aria-label="Share"
+            title="Share"
+            onClick={shareResult}
+          >
+            <Share2 size={20} />
+          </button>
+          <button
+            type="button"
+            className={`discovery-action-button ${saved ? 'is-saved' : ''}`}
+            aria-label={saved ? 'Saved' : 'Save'}
+            title={saved ? 'Saved' : 'Save'}
+            onClick={toggleSave}
+          >
+            <Bookmark size={20} fill={saved ? 'currentColor' : 'none'} />
+          </button>
+        </div>
+        {actionStatus ? <span className="discovery-action-status">{actionStatus}</span> : null}
+        {bookingOpen ? (
+          <form className="discovery-booking-form" onSubmit={submitBooking}>
+            <label>
+              <span>Name</span>
+              <input
+                type="text"
+                maxLength={160}
+                value={bookingName}
+                onChange={(event) => setBookingName(event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              <span>Contact</span>
+              <input
+                type="text"
+                maxLength={160}
+                value={bookingContact}
+                onChange={(event) => setBookingContact(event.target.value)}
+                placeholder="Phone or email"
+              />
+            </label>
+            <label>
+              <span>Preferred time</span>
+              <input
+                type="datetime-local"
+                value={bookingTime}
+                onChange={(event) => setBookingTime(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>Note</span>
+              <textarea
+                rows={2}
+                value={bookingNote}
+                onChange={(event) => setBookingNote(event.target.value)}
+                placeholder={`Book ${result.title}`}
+              />
+            </label>
+            <div className="discovery-booking-actions">
+              <button type="button" className="ghost-button" onClick={() => setBookingOpen(false)}>
+                Cancel
+              </button>
+              <button type="submit" className="primary-button" disabled={bookingBusy}>
+                {bookingBusy ? 'Sending' : 'Send request'}
+              </button>
+            </div>
+          </form>
+        ) : null}
       </div>
     </article>
   )
@@ -812,6 +1043,77 @@ function discoveryPriceLabel(result: DiscoverySearchResult) {
     default:
       return null
   }
+}
+
+function discoverySharePayload(
+  result: DiscoverySearchResult,
+  priceLabel: string | null,
+  durationLabel: string | null,
+  location: string,
+) {
+  return {
+    business_id: result.business_id,
+    venue_id: result.venue_id,
+    experience_id: result.experience_id,
+    title: result.title,
+    business_name: result.business_name,
+    category: result.category,
+    subcategory: result.subcategory,
+    location,
+    city: result.city,
+    area: result.area,
+    distance_km: result.distance_km,
+    price_label: priceLabel ?? undefined,
+    duration_label: durationLabel ?? undefined,
+    image_url: result.image_url,
+    active_offer_title: result.active_offer_title,
+    next_event_title: result.next_event_title,
+  }
+}
+
+function compactDiscoveryCount(count: number) {
+  if (count >= 1000000) return `${Math.round(count / 100000) / 10}M`
+  if (count >= 1000) return `${Math.round(count / 100) / 10}K`
+  return String(count)
+}
+
+function loadDiscoveryRecentSearches() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(discoveryRecentSearchesKey) ?? '[]')
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item): item is string => typeof item === 'string').slice(0, 6)
+  } catch {
+    return []
+  }
+}
+
+function saveDiscoveryRecentSearch(query: string) {
+  const next = [
+    query,
+    ...loadDiscoveryRecentSearches().filter((item) => item.toLowerCase() !== query.toLowerCase()),
+  ].slice(0, 6)
+  localStorage.setItem(discoveryRecentSearchesKey, JSON.stringify(next))
+  return next
+}
+
+function loadDiscoverySavedBusinesses() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(discoverySavedBusinessesKey) ?? '[]')
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item): item is number => typeof item === 'number')
+  } catch {
+    return []
+  }
+}
+
+function toggleDiscoverySavedBusiness(businessID: number) {
+  const savedBusinesses = loadDiscoverySavedBusinesses()
+  const exists = savedBusinesses.includes(businessID)
+  const next = exists
+    ? savedBusinesses.filter((item) => item !== businessID)
+    : [businessID, ...savedBusinesses]
+  localStorage.setItem(discoverySavedBusinessesKey, JSON.stringify(next))
+  return next
 }
 
 export function Avatar({ name, src }: { name: string; src?: string }) {
@@ -863,7 +1165,7 @@ function ContactSection({
           <span>
             <strong>{friend.display_name}</strong>
             <small>
-              {conversation?.latest_message?.content ??
+              {conversationLatestLabel(conversation) ??
                 (lastActivity
                   ? `Active ${formatContactTime(lastActivity)}`
                   : `@${friend.username}`)}
@@ -873,6 +1175,22 @@ function ContactSection({
       ))}
     </section>
   )
+}
+
+function conversationLatestLabel(conversation?: Conversation) {
+  const message = conversation?.latest_message
+  if (!message) return null
+  if (message.message_type === 'business_share') {
+    try {
+      const parsed = JSON.parse(message.content ?? '{}') as { business_name?: string }
+      return parsed.business_name ? `Shared ${parsed.business_name}` : 'Shared a business'
+    } catch {
+      return 'Shared a business'
+    }
+  }
+  if (message.message_type === 'image') return 'Photo'
+  if (message.message_type === 'video') return 'Video'
+  return message.content ?? 'Message'
 }
 
 function isRecentlyActive(value?: string) {

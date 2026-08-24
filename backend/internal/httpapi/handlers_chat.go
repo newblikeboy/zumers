@@ -21,6 +21,10 @@ type messageCreateRequest struct {
 	MediaPublicID *string `json:"media_public_id"`
 }
 
+type businessShareVoteRequest struct {
+	Vote string `json:"vote"`
+}
+
 type conversationResponse struct {
 	ID               int64            `json:"id"`
 	UserOneID        int64            `json:"user_one_id"`
@@ -50,7 +54,18 @@ type messageResponse struct {
 	DeliveredCount int                  `json:"delivered_count"`
 	ReadCount      int                  `json:"read_count"`
 	Receipts       []messageReceiptItem `json:"receipts,omitempty"`
+	BusinessVote   *businessVoteSummary `json:"business_vote,omitempty"`
 	CreatedAt      string               `json:"created_at"`
+}
+
+type businessVoteSummary struct {
+	MessageID          int64   `json:"message_id"`
+	LikeCount          int64   `json:"like_count"`
+	DislikeCount       int64   `json:"dislike_count"`
+	ParticipantCount   int64   `json:"participant_count"`
+	MyVote             *string `json:"my_vote,omitempty"`
+	AllLiked           bool    `json:"all_liked"`
+	RecommendationText *string `json:"recommendation_text,omitempty"`
 }
 
 type messageReceiptResponse struct {
@@ -293,6 +308,7 @@ func (s *Server) handleMessageHistory(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_ = s.hydrateMessageReceiptCounts(r.Context(), &message)
+		_ = s.hydrateBusinessShareVoteSummary(r.Context(), &message, currentUserID(r))
 		messages = append(messages, message)
 	}
 
@@ -324,6 +340,83 @@ func (s *Server) handleConversationRead(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "read"})
 }
 
+func (s *Server) handleBusinessShareVoteSet(w http.ResponseWriter, r *http.Request) {
+	messageID, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid message id")
+		return
+	}
+
+	var req businessShareVoteRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	vote := strings.ToLower(strings.TrimSpace(req.Vote))
+	if vote != "like" && vote != "dislike" {
+		writeError(w, http.StatusBadRequest, "vote must be like or dislike")
+		return
+	}
+
+	var conversationID int64
+	var messageType string
+	err = s.db.QueryRowContext(
+		r.Context(),
+		`SELECT conversation_id, message_type
+		 FROM messages
+		 WHERE id = $1 AND deleted_at IS NULL`,
+		messageID,
+	).Scan(&conversationID, &messageType)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "message not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load message")
+		return
+	}
+	if messageType != "business_share" {
+		writeError(w, http.StatusBadRequest, "message is not a business share")
+		return
+	}
+	if !s.isConversationParticipant(r.Context(), conversationID, currentUserID(r)) {
+		writeError(w, http.StatusForbidden, "conversation not found")
+		return
+	}
+
+	_, err = s.db.ExecContext(
+		r.Context(),
+		`INSERT INTO business_share_votes (message_id, user_id, vote)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT (message_id, user_id)
+		 DO UPDATE SET vote = EXCLUDED.vote, updated_at = CURRENT_TIMESTAMP`,
+		messageID,
+		currentUserID(r),
+		vote,
+	)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save vote")
+		return
+	}
+
+	summary, err := s.businessShareVoteSummary(r.Context(), messageID, currentUserID(r))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load votes")
+		return
+	}
+
+	memberIDs, _ := s.conversationMemberIDs(r.Context(), conversationID)
+	broadcastSummary := summary
+	broadcastSummary.MyVote = nil
+	for _, memberID := range memberIDs {
+		if memberID == currentUserID(r) {
+			continue
+		}
+		s.chatHub.SendToUser(memberID, "business_share.vote", broadcastSummary)
+	}
+	writeJSON(w, http.StatusOK, summary)
+}
+
 func (s *Server) createMessage(ctx context.Context, senderID int64, conversationID int64, req messageCreateRequest) (messageResponse, error) {
 	conversation, err := s.getConversation(ctx, conversationID, senderID)
 	if err != nil {
@@ -342,6 +435,9 @@ func (s *Server) createMessage(ctx context.Context, senderID int64, conversation
 	req.MediaPublicID = cleanOptionalText(req.MediaPublicID)
 	if req.MessageType == "text" && req.Content == nil {
 		return messageResponse{}, errors.New("content is required for text messages")
+	}
+	if req.MessageType == "business_share" && req.Content == nil {
+		return messageResponse{}, errors.New("content is required for business shares")
 	}
 	if (req.MessageType == "image" || req.MessageType == "video") && req.MediaURL == nil {
 		return messageResponse{}, errors.New("media_url is required for media messages")
@@ -395,6 +491,7 @@ func (s *Server) createMessage(ctx context.Context, senderID int64, conversation
 	message.DeliveredAt = nullableString(deliveredAt)
 	message.ReadAt = nullableString(readAt)
 	message.RecipientCount = maxInt(0, len(conversation.Members)-1)
+	_ = s.hydrateBusinessShareVoteSummary(ctx, &message, senderID)
 	return message, nil
 }
 
@@ -433,6 +530,7 @@ func (s *Server) getLatestMessage(ctx context.Context, conversationID int64) (me
 		return messageResponse{}, err
 	}
 	_ = s.hydrateMessageReceiptCounts(ctx, &message)
+	_ = s.hydrateBusinessShareVoteSummary(ctx, &message, 0)
 	return message, nil
 }
 
@@ -669,6 +767,62 @@ func (s *Server) hydrateMessageReceiptCounts(ctx context.Context, message *messa
 	}
 	message.Receipts = receipts
 	return nil
+}
+
+func (s *Server) hydrateBusinessShareVoteSummary(ctx context.Context, message *messageResponse, viewerID int64) error {
+	if message.MessageType != "business_share" {
+		return nil
+	}
+	summary, err := s.businessShareVoteSummary(ctx, message.ID, viewerID)
+	if err != nil {
+		return err
+	}
+	message.BusinessVote = &summary
+	return nil
+}
+
+func (s *Server) businessShareVoteSummary(ctx context.Context, messageID int64, viewerID int64) (businessVoteSummary, error) {
+	var summary businessVoteSummary
+	var conversationType string
+	var myVote sql.NullString
+	err := s.db.QueryRowContext(
+		ctx,
+		`SELECT
+		   m.id,
+		   COUNT(DISTINCT cm.user_id) AS participant_count,
+		   COUNT(DISTINCT CASE WHEN bsv.vote = 'like' THEN bsv.user_id END) AS like_count,
+		   COUNT(DISTINCT CASE WHEN bsv.vote = 'dislike' THEN bsv.user_id END) AS dislike_count,
+		   MAX(CASE WHEN bsv.user_id = $2 THEN bsv.vote END) AS my_vote,
+		   c.conversation_type
+		 FROM messages m
+		 JOIN conversations c ON c.id = m.conversation_id
+		 JOIN conversation_members cm ON cm.conversation_id = c.id AND cm.left_at IS NULL
+		 LEFT JOIN business_share_votes bsv ON bsv.message_id = m.id
+		 WHERE m.id = $1
+		 GROUP BY m.id, c.conversation_type`,
+		messageID,
+		viewerID,
+	).Scan(
+		&summary.MessageID,
+		&summary.ParticipantCount,
+		&summary.LikeCount,
+		&summary.DislikeCount,
+		&myVote,
+		&conversationType,
+	)
+	if err != nil {
+		return businessVoteSummary{}, err
+	}
+	summary.MyVote = nullableString(myVote)
+	summary.AllLiked = summary.ParticipantCount > 0 && summary.LikeCount == summary.ParticipantCount
+	if summary.AllLiked {
+		text := "This is the perfect choice for your group."
+		if conversationType == "direct" || summary.ParticipantCount <= 2 {
+			text = "This is best for both of you."
+		}
+		summary.RecommendationText = &text
+	}
+	return summary, nil
 }
 
 func (s *Server) messageReceiptSnapshot(ctx context.Context, messageID int64) (messageReceiptItem, error) {
@@ -931,7 +1085,7 @@ func maxInt(first int, second int) int {
 
 func cleanMessageType(value string) string {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "image", "video":
+	case "image", "video", "business_share":
 		return strings.ToLower(strings.TrimSpace(value))
 	default:
 		return "text"

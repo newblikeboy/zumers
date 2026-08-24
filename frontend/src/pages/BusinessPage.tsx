@@ -948,6 +948,14 @@ export function BusinessPage({ mode, initialAuth }: BusinessPageProps) {
                       <div key={booking.id}>
                         <strong>{booking.requester_name}</strong>
                         <span>{booking.booking_note ?? 'Booking request'}</span>
+                        <span className="business-booking-detail">
+                          {booking.requester_contact ? `Contact: ${booking.requester_contact}` : 'No contact shared'}
+                        </span>
+                        {booking.booking_time ? (
+                          <span className="business-booking-detail">
+                            Preferred: {formatDashboardDateTime(booking.booking_time)}
+                          </span>
+                        ) : null}
                         <small>{booking.status}</small>
                       </div>
                     ))}

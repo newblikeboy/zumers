@@ -2,13 +2,13 @@ import {
   BadgePlus,
   ChevronDown,
   ChevronUp,
+  Heart,
   MessageCircle,
   Pause,
   Play,
   Repeat2,
   Send,
   Star,
-  ThumbsUp,
   UserCircle,
   Volume2,
   VolumeX,
@@ -69,6 +69,7 @@ export function ReelsPage() {
   const [comments, setComments] = useState<Comment[]>([])
   const [commentsLoading, setCommentsLoading] = useState(false)
   const [sharePost, setSharePost] = useState<Post | null>(null)
+  const [reactionBusyIDs, setReactionBusyIDs] = useState<Set<number>>(() => new Set())
   const videoRefs = useRef(new Map<string, HTMLVideoElement>())
 
   useEffect(() => {
@@ -184,6 +185,10 @@ export function ReelsPage() {
   }
 
   async function toggleReaction(post: Post) {
+    if (reactionBusyIDs.has(post.id)) return
+    const optimistic = optimisticPostReaction(post, post.viewer_reaction ? undefined : 'like')
+    updatePost(optimistic)
+    setReactionBusyIDs((current) => new Set(current).add(post.id))
     setError(null)
     try {
       const updated = post.viewer_reaction
@@ -191,7 +196,14 @@ export function ReelsPage() {
         : await api.reactToPost(post.id)
       updatePost(updated)
     } catch (err) {
+      updatePost(post)
       setError(err instanceof Error ? err.message : 'Could not update reaction')
+    } finally {
+      setReactionBusyIDs((current) => {
+        const next = new Set(current)
+        next.delete(post.id)
+        return next
+      })
     }
   }
 
@@ -354,9 +366,12 @@ export function ReelsPage() {
                   className={
                     reel.post.viewer_reaction ? 'reel-action active' : 'reel-action'
                   }
+                  disabled={reactionBusyIDs.has(reel.post.id)}
+                  aria-label={reel.post.viewer_reaction ? 'Remove reaction' : 'Like reel'}
+                  title={reel.post.viewer_reaction ? 'Remove reaction' : 'Like reel'}
                   onClick={() => toggleReaction(reel.post)}
                 >
-                  <ThumbsUp size={22} />
+                  <Heart size={22} fill={reel.post.viewer_reaction ? 'currentColor' : 'none'} />
                   <span>{compactCount(reel.post.like_count)}</span>
                 </button>
                 <button className="reel-action" onClick={() => openComments(reel.post)}>
@@ -479,6 +494,19 @@ function reelSourcePosts(post: Post) {
     sources.push(post.shared_post)
   }
   return sources
+}
+
+function optimisticPostReaction(post: Post, reactionType?: string): Post {
+  const hadReaction = Boolean(post.viewer_reaction)
+  const nextCount = reactionType
+    ? post.like_count + (hadReaction ? 0 : 1)
+    : Math.max(0, post.like_count - (hadReaction ? 1 : 0))
+
+  return {
+    ...post,
+    like_count: nextCount,
+    viewer_reaction: reactionType,
+  }
 }
 
 function replacePost(post: Post, updated: Post): Post {

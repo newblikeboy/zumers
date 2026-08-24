@@ -67,6 +67,8 @@ type discoverySearchResult struct {
 	ContactPhone           *string  `json:"contact_phone,omitempty"`
 	WhatsappNumber         *string  `json:"whatsapp_number,omitempty"`
 	WebsiteURL             *string  `json:"website_url,omitempty"`
+	LikesReceived          int64    `json:"likes_received"`
+	LikedByMe              bool     `json:"liked_by_me"`
 	VerificationLevel      string   `json:"verification_level"`
 	Score                  float64  `json:"score"`
 	Reasons                []string `json:"reasons"`
@@ -90,7 +92,7 @@ func (s *Server) handleDiscoverySearch(w http.ResponseWriter, r *http.Request) {
 	intent := parseDiscoverySearchIntent(r, query)
 	limit := pageLimit(r, 20, 50)
 
-	candidates, err := s.loadDiscoveryCandidates(r.Context())
+	candidates, err := s.loadDiscoveryCandidates(r.Context(), currentUserID(r))
 	if err != nil {
 		s.logger.Error("discovery search failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not search discovery results")
@@ -126,7 +128,7 @@ func (s *Server) handleDiscoverySearch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) loadDiscoveryCandidates(ctx context.Context) ([]discoveryCandidate, error) {
+func (s *Server) loadDiscoveryCandidates(ctx context.Context, userID int64) ([]discoveryCandidate, error) {
 	rows, err := s.db.QueryContext(
 		ctx,
 		`SELECT
@@ -148,6 +150,16 @@ func (s *Server) loadDiscoveryCandidates(ctx context.Context) ([]discoveryCandid
 		   b.contact_phone,
 		   b.whatsapp_number,
 		   b.website_url,
+		   (
+		     SELECT COUNT(*)
+		     FROM business_likes bl
+		     WHERE bl.business_id = b.id
+		   ) AS likes_received,
+		   EXISTS (
+		     SELECT 1
+		     FROM business_likes bl
+		     WHERE bl.business_id = b.id AND bl.user_id = $1
+		   ) AS liked_by_me,
 		   b.description,
 		   b.offerings,
 		   b.onboarding_status,
@@ -217,6 +229,7 @@ func (s *Server) loadDiscoveryCandidates(ctx context.Context) ([]discoveryCandid
 		   ON ve.venue_id = v.id AND ve.status = 'active'
 		 WHERE b.account_status = 'active'
 		 ORDER BY b.updated_at DESC, ve.display_order NULLS LAST, ve.id NULLS LAST`,
+		userID,
 	)
 	if err != nil {
 		return nil, err
@@ -232,6 +245,8 @@ func (s *Server) loadDiscoveryCandidates(ctx context.Context) ([]discoveryCandid
 		var contactPhone, whatsappNumber, websiteURL, businessDescription, offerings sql.NullString
 		var businessLatitude, businessLongitude sql.NullFloat64
 		var businessLocationVerified bool
+		var likesReceived int64
+		var likedByMe bool
 		var venueID sql.NullInt64
 		var venueName, venueLocation, venueCity, venueArea sql.NullString
 		var venueLatitude, venueLongitude sql.NullFloat64
@@ -262,6 +277,8 @@ func (s *Server) loadDiscoveryCandidates(ctx context.Context) ([]discoveryCandid
 			&contactPhone,
 			&whatsappNumber,
 			&websiteURL,
+			&likesReceived,
+			&likedByMe,
 			&businessDescription,
 			&offerings,
 			&onboardingStatus,
@@ -371,6 +388,8 @@ func (s *Server) loadDiscoveryCandidates(ctx context.Context) ([]discoveryCandid
 			ContactPhone:           nullableString(contactPhone),
 			WhatsappNumber:         nullableString(whatsappNumber),
 			WebsiteURL:             nullableString(websiteURL),
+			LikesReceived:          likesReceived,
+			LikedByMe:              likedByMe,
 			VerificationLevel:      verificationLevel,
 		}
 		if result.Description == nil {

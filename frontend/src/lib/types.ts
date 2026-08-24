@@ -341,9 +341,17 @@ export type DiscoverySearchResult = {
   contact_phone?: string
   whatsapp_number?: string
   website_url?: string
+  likes_received?: number
+  liked_by_me?: boolean
   verification_level: BusinessVerificationLevel
   score: number
   reasons: string[]
+}
+
+export type BusinessLikeResponse = {
+  business_id: number
+  liked: boolean
+  likes_received: number
 }
 
 export type DiscoverySearchResponse = {
@@ -415,7 +423,7 @@ export type Message = {
   id: number
   conversation_id: number
   sender_id: number
-  message_type: 'text' | 'image' | 'video'
+  message_type: 'text' | 'image' | 'video' | 'business_share'
   content?: string
   media_url?: string
   media_public_id?: string
@@ -425,7 +433,37 @@ export type Message = {
   delivered_count: number
   read_count: number
   receipts?: MessageReceipt[]
+  business_vote?: BusinessShareVoteSummary
   created_at: string
+}
+
+export type BusinessShareVoteSummary = {
+  message_id: number
+  like_count: number
+  dislike_count: number
+  participant_count: number
+  my_vote?: 'like' | 'dislike'
+  all_liked: boolean
+  recommendation_text?: string
+}
+
+export type SharedBusinessMessage = {
+  business_id: number
+  venue_id?: number
+  experience_id?: number
+  title: string
+  business_name: string
+  category: string
+  subcategory?: string
+  location: string
+  city?: string
+  area?: string
+  distance_km?: number
+  price_label?: string
+  duration_label?: string
+  image_url?: string
+  active_offer_title?: string
+  next_event_title?: string
 }
 
 export type MessageReceipt = {

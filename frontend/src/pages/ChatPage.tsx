@@ -4,11 +4,14 @@ import {
   CheckCheck,
   ChevronDown,
   Crown,
+  Heart,
   ImagePlus,
   Info,
+  MapPin,
   Plus,
   Search,
   Send,
+  ThumbsDown,
   Users,
   Wifi,
   WifiOff,
@@ -22,13 +25,22 @@ import { EmptyState } from '../components/EmptyState'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { api } from '../lib/api'
 import { cloudinaryDeliveryUrl, uploadToCloudinary } from '../lib/cloudinary'
-import type { Conversation, Message, PostMediaInput, User } from '../lib/types'
+import type {
+  BusinessShareVoteSummary,
+  Conversation,
+  Message,
+  PostMediaInput,
+  SharedBusinessMessage,
+  User,
+} from '../lib/types'
 
 const wsBaseUrl =
   import.meta.env.VITE_WS_BASE_URL ??
   (typeof window !== 'undefined'
     ? `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
     : 'ws://localhost:8080')
+
+const pendingBusinessShareKey = 'zumers.pendingBusinessShare'
 
 type MessageReceipt = {
   conversation_id: number
@@ -70,6 +82,9 @@ export function ChatPage() {
   const [showScrollToLatest, setShowScrollToLatest] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [selectedMessageID, setSelectedMessageID] = useState<number | null>(null)
+  const [pendingBusinessShare, setPendingBusinessShare] = useState<SharedBusinessMessage | null>(null)
+  const [shareBusyConversationID, setShareBusyConversationID] = useState<number | null>(null)
+  const [shareError, setShareError] = useState<string | null>(null)
   const [isMobileChat, setIsMobileChat] = useState(() =>
     typeof window !== 'undefined'
       ? window.matchMedia('(max-width: 760px)').matches
@@ -111,6 +126,20 @@ export function ChatPage() {
     Promise.all([loadConversations(), loadFriends()]).catch((err) =>
       setError(err instanceof Error ? err.message : 'Could not load chats'),
     )
+  }, [])
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(pendingBusinessShareKey)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as SharedBusinessMessage
+      if (parsed?.business_id && parsed.title && parsed.business_name) {
+        setPendingBusinessShare(parsed)
+        setMobileChatView('list')
+      }
+    } catch {
+      sessionStorage.removeItem(pendingBusinessShareKey)
+    }
   }, [])
 
   useEffect(() => {
@@ -215,6 +244,9 @@ export function ChatPage() {
         if (payload.type === 'conversation.read') {
           const receipt = payload.data as MessageReceipt
           applyReceipt(receipt, 'read')
+        }
+        if (payload.type === 'business_share.vote') {
+          applyBusinessVoteSummary(payload.data as BusinessShareVoteSummary)
         }
       }
       ws.onclose = () => {
@@ -340,6 +372,113 @@ export function ChatPage() {
     setMessages((current) => [...current, message])
   }
 
+  async function shareBusinessToConversation(conversation: Conversation) {
+    if (!pendingBusinessShare) return
+    setShareBusyConversationID(conversation.id)
+    setShareError(null)
+    try {
+      const message = await api.sendBusinessShare(
+        conversation.id,
+        JSON.stringify(pendingBusinessShare),
+      )
+      sessionStorage.removeItem(pendingBusinessShareKey)
+      setPendingBusinessShare(null)
+      setActive(conversation)
+      setMobileChatView('thread')
+      if (activeRef.current?.id === conversation.id) {
+        setMessages((current) =>
+          current.some((item) => item.id === message.id) ? current : [...current, message],
+        )
+      }
+      await loadConversations()
+    } catch (err) {
+      setShareError(err instanceof Error ? err.message : 'Could not share business')
+    } finally {
+      setShareBusyConversationID(null)
+    }
+  }
+
+  async function voteBusinessShare(messageID: number, vote: 'like' | 'dislike') {
+    if (!active) return
+    let previousMessages: Message[] = []
+    setMessages((current) => {
+      previousMessages = current
+      return current.map((message) => {
+        if (message.id !== messageID) return message
+        return {
+          ...message,
+          business_vote: optimisticBusinessVoteSummary(message, vote, active),
+        }
+      })
+    })
+    try {
+      const summary = await api.voteBusinessShare(messageID, vote)
+      applyBusinessVoteSummary(summary)
+    } catch (err) {
+      setMessages(previousMessages)
+      setError(err instanceof Error ? err.message : 'Could not save vote')
+    }
+  }
+
+  function applyBusinessVoteSummary(summary: BusinessShareVoteSummary) {
+    setMessages((current) =>
+      current.map((message) => {
+        if (message.id !== summary.message_id) return message
+        return {
+          ...message,
+          business_vote: {
+            ...summary,
+            my_vote: summary.my_vote ?? message.business_vote?.my_vote,
+          },
+        }
+      }),
+    )
+  }
+
+  function optimisticBusinessVoteSummary(
+    message: Message,
+    vote: 'like' | 'dislike',
+    conversation: Conversation,
+  ): BusinessShareVoteSummary {
+    const current = message.business_vote
+    const previousVote = current?.my_vote
+    const participantCount = current?.participant_count ?? conversation.member_count
+    let likeCount = current?.like_count ?? 0
+    let dislikeCount = current?.dislike_count ?? 0
+
+    if (previousVote === vote) {
+      return {
+        message_id: message.id,
+        like_count: likeCount,
+        dislike_count: dislikeCount,
+        participant_count: participantCount,
+        my_vote: vote,
+        all_liked: participantCount > 0 && likeCount === participantCount,
+        recommendation_text: current?.recommendation_text,
+      }
+    }
+
+    if (previousVote === 'like') likeCount = Math.max(0, likeCount - 1)
+    if (previousVote === 'dislike') dislikeCount = Math.max(0, dislikeCount - 1)
+    if (vote === 'like') likeCount += 1
+    if (vote === 'dislike') dislikeCount += 1
+
+    const allLiked = participantCount > 0 && likeCount === participantCount
+    return {
+      message_id: message.id,
+      like_count: likeCount,
+      dislike_count: dislikeCount,
+      participant_count: participantCount,
+      my_vote: vote,
+      all_liked: allLiked,
+      recommendation_text: allLiked
+        ? conversation.conversation_type === 'group'
+          ? 'This is the perfect choice for your group.'
+          : 'This is best for both of you.'
+        : undefined,
+    }
+  }
+
   async function createGroup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const title = groupTitle.trim()
@@ -420,6 +559,46 @@ export function ChatPage() {
           </div>
         </div>
         <ErrorBanner message={error} />
+        {pendingBusinessShare ? (
+          <div className="business-share-picker">
+            <div className="business-share-picker-heading">
+              <div>
+                <span>Share business</span>
+                <strong>{pendingBusinessShare.business_name}</strong>
+              </div>
+              <button
+                aria-label="Cancel business share"
+                className="icon-button quiet"
+                type="button"
+                onClick={() => {
+                  sessionStorage.removeItem(pendingBusinessShareKey)
+                  setPendingBusinessShare(null)
+                  setShareError(null)
+                }}
+              >
+                <X size={17} />
+              </button>
+            </div>
+            {shareError ? <span className="business-share-error">{shareError}</span> : null}
+            <div className="business-share-targets">
+              {conversations.map((conversation) => (
+                <button
+                  key={conversation.id}
+                  type="button"
+                  onClick={() => shareBusinessToConversation(conversation)}
+                  disabled={shareBusyConversationID !== null}
+                >
+                  <ConversationAvatar conversation={conversation} />
+                  <span>
+                    <strong>{conversationDisplayName(conversation)}</strong>
+                    <small>{conversationSubtitle(conversation)}</small>
+                  </span>
+                  <Send size={16} />
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         {groupComposerOpen ? (
           <form className="group-composer" onSubmit={createGroup}>
             <div className="group-composer-heading">
@@ -492,7 +671,7 @@ export function ChatPage() {
               <ConversationAvatar conversation={conversation} />
               <div>
                 <strong>{conversationDisplayName(conversation)}</strong>
-                <span>{conversation.latest_message?.content ?? 'No messages yet'}</span>
+                <span>{messagePreview(conversation.latest_message)}</span>
               </div>
               <small>{formatShortTime(conversation.updated_at)}</small>
             </button>
@@ -544,10 +723,12 @@ export function ChatPage() {
                   <MessageBubble
                     key={message.id}
                     message={message}
+                    conversation={active}
                     mine={message.sender_id === user?.id}
                     sender={active.members.find((member) => member.id === message.sender_id)}
                     showSender={active.conversation_type === 'group' && message.sender_id !== user?.id}
                     receipt={message.sender_id === user?.id ? messageReceipt(message) : undefined}
+                    onVote={voteBusinessShare}
                     onOpenInfo={() => {
                       setSelectedMessageID(message.id)
                       setDetailsOpen(true)
@@ -679,6 +860,28 @@ function conversationSubtitle(conversation: Conversation) {
     : 'Friend conversation'
 }
 
+function messagePreview(message?: Message) {
+  if (!message) return 'No messages yet'
+  const sharedBusiness = parseSharedBusinessMessage(message.content)
+  if (message.message_type === 'business_share' || sharedBusiness) {
+    return sharedBusiness ? `Shared ${sharedBusiness.business_name}` : 'Shared a business'
+  }
+  if (message.message_type === 'image') return 'Photo'
+  if (message.message_type === 'video') return 'Video'
+  return message.content ?? 'Message'
+}
+
+function parseSharedBusinessMessage(content?: string): SharedBusinessMessage | null {
+  if (!content) return null
+  try {
+    const parsed = JSON.parse(content) as SharedBusinessMessage
+    if (!parsed?.business_id || !parsed.title || !parsed.business_name) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
 function RealtimeBadge({ status }: { status: 'Connecting' | 'Live' | 'Reconnecting' }) {
   const online = status === 'Live'
   return (
@@ -690,27 +893,49 @@ function RealtimeBadge({ status }: { status: 'Connecting' | 'Live' | 'Reconnecti
 }
 
 function MessageBubble({
+  conversation,
   message,
   mine,
+  onVote,
   sender,
   showSender,
   receipt,
   onOpenInfo,
 }: {
+  conversation: Conversation
   message: Message
   mine: boolean
+  onVote: (messageID: number, vote: 'like' | 'dislike') => void
   sender?: User
   showSender: boolean
   receipt?: 'sent' | 'delivered' | 'read'
   onOpenInfo: () => void
 }) {
+  const sharedBusiness = parseSharedBusinessMessage(message.content)
+
   return (
     <div className={mine ? 'message mine' : 'message'}>
-      <div className={message.media_url ? 'message-bubble media' : 'message-bubble'}>
+      <div
+        className={
+          sharedBusiness
+            ? 'message-bubble business-share-message'
+            : message.media_url
+              ? 'message-bubble media'
+              : 'message-bubble'
+        }
+      >
         {showSender ? (
           <strong className="message-sender">{sender?.display_name ?? 'Member'}</strong>
         ) : null}
-        {message.media_url ? (
+        {sharedBusiness ? (
+          <BusinessShareMessageCard
+            business={sharedBusiness}
+            conversation={conversation}
+            message={message}
+            onVote={onVote}
+          />
+        ) : null}
+        {message.media_url && !sharedBusiness ? (
           <div className="message-media">
             {message.message_type === 'video' ? (
               <video controls playsInline src={message.media_url} />
@@ -719,7 +944,7 @@ function MessageBubble({
             )}
           </div>
         ) : null}
-        {message.content ? <span className="message-text">{message.content}</span> : null}
+        {message.content && !sharedBusiness ? <span className="message-text">{message.content}</span> : null}
         <small className="message-meta">
           <span>{formatShortTime(message.created_at)}</span>
           {receipt ? (
@@ -730,6 +955,72 @@ function MessageBubble({
             />
           ) : null}
         </small>
+      </div>
+    </div>
+  )
+}
+
+function BusinessShareMessageCard({
+  business,
+  conversation,
+  message,
+  onVote,
+}: {
+  business: SharedBusinessMessage
+  conversation: Conversation
+  message: Message
+  onVote: (messageID: number, vote: 'like' | 'dislike') => void
+}) {
+  const vote = message.business_vote
+  const acceptedText = vote?.recommendation_text
+  const location = [business.area, business.city].filter(Boolean).join(', ') || business.location
+  const participantLabel = conversation.conversation_type === 'group'
+    ? `${vote?.participant_count ?? conversation.member_count} members`
+    : '2 people'
+
+  return (
+    <div className="shared-business-card">
+      {business.image_url ? <img src={business.image_url} alt="" /> : null}
+      <div className="shared-business-content">
+        <span className="shared-business-type">{business.subcategory ?? business.category}</span>
+        <h3>{business.title}</h3>
+        <strong>{business.business_name}</strong>
+        <div className="shared-business-meta">
+          <span><MapPin size={14} /> {business.distance_km ? `${business.distance_km} km` : location}</span>
+          {business.price_label ? <span>{business.price_label}</span> : null}
+          {business.duration_label ? <span>{business.duration_label}</span> : null}
+        </div>
+        {business.active_offer_title || business.next_event_title ? (
+          <div className="shared-business-signals">
+            {business.active_offer_title ? <span>{business.active_offer_title}</span> : null}
+            {business.next_event_title ? <span>{business.next_event_title}</span> : null}
+          </div>
+        ) : null}
+        <div className="shared-business-votes">
+          <button
+            type="button"
+            className={vote?.my_vote === 'like' ? 'active' : ''}
+            onClick={() => onVote(message.id, 'like')}
+          >
+            <Heart size={17} fill={vote?.my_vote === 'like' ? 'currentColor' : 'none'} />
+            <span>{vote?.like_count ?? 0}</span>
+          </button>
+          <button
+            type="button"
+            className={vote?.my_vote === 'dislike' ? 'active dislike' : 'dislike'}
+            onClick={() => onVote(message.id, 'dislike')}
+          >
+            <ThumbsDown size={17} />
+            <span>{vote?.dislike_count ?? 0}</span>
+          </button>
+          <small>{participantLabel}</small>
+        </div>
+        {acceptedText ? (
+          <div className="shared-business-verdict">
+            <Check size={16} />
+            <span>{acceptedText}</span>
+          </div>
+        ) : null}
       </div>
     </div>
   )

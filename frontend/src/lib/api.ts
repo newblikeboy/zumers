@@ -6,6 +6,9 @@ import type {
   BusinessDashboard,
   BusinessDashboardUpdate,
   BusinessDuplicateCheckResponse,
+  BusinessBookingRequest,
+  BusinessLikeResponse,
+  BusinessShareVoteSummary,
   BusinessMedia,
   BusinessTaxonomy,
   BusinessVenueExperience,
@@ -181,6 +184,30 @@ export const api = {
       method: 'DELETE',
     }),
 
+  likeBusiness: (id: number) =>
+    apiRequest<BusinessLikeResponse>(`/businesses/${id}/like`, {
+      method: 'POST',
+    }),
+
+  removeBusinessLike: (id: number) =>
+    apiRequest<BusinessLikeResponse>(`/businesses/${id}/like`, {
+      method: 'DELETE',
+    }),
+
+  createBusinessBooking: (
+    id: number,
+    body: {
+      requester_name: string
+      requester_contact?: string
+      booking_note?: string
+      booking_time?: string
+    },
+  ) =>
+    apiRequest<BusinessBookingRequest>(`/businesses/${id}/bookings`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
   comments: (id: number) =>
     apiRequest<{ comments: Comment[] }>(`/posts/${id}/comments`),
 
@@ -242,6 +269,18 @@ export const api = {
     apiRequest<Message>(`/conversations/${conversationId}/messages`, {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+
+  sendBusinessShare: (conversationId: number, content: string) =>
+    apiRequest<Message>(`/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ message_type: 'business_share', content }),
+    }),
+
+  voteBusinessShare: (messageId: number, vote: 'like' | 'dislike') =>
+    apiRequest<BusinessShareVoteSummary>(`/messages/${messageId}/business-vote`, {
+      method: 'POST',
+      body: JSON.stringify({ vote }),
     }),
 
   markConversationRead: (conversationId: number) =>
