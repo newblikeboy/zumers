@@ -58,6 +58,7 @@ Query parameters:
 | `q` | Natural-language intent, for example `momos near me`, `fun tonight`, or `date cafe under 1000` |
 | `chips` | Comma-separated quick filters such as `Open now,Friends,Under 1000` |
 | `latitude` / `longitude` | Optional user location for distance scoring |
+| `radius_km` | Optional nearby radius filter when latitude and longitude are present. Clamped from 1 to 50 km |
 | `limit` | Result count, capped by the API |
 
 The response includes interpreted categories, moods, services, audiences, budget, group size, duration, and ranked result cards.

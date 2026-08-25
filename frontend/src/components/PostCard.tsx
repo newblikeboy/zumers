@@ -201,17 +201,6 @@ export function PostCard({
 
       <MediaGrid media={media} />
 
-      <div className="engagement-summary">
-        <span className="reaction-count">
-          <Heart size={13} fill="currentColor" />
-          {post.like_count}
-        </span>
-        <button onClick={() => setCommentsOpen((value) => !value)}>
-          {countLabel(post.comment_count, 'comment')}
-        </button>
-        <span>{countLabel(post.share_count, 'share')}</span>
-      </div>
-
       {error ? <div className="inline-error">{error}</div> : null}
 
       <div className="engagement-actions">
@@ -243,6 +232,8 @@ export function PostCard({
             title={post.viewer_reaction ? 'Remove reaction' : 'Like post'}
           >
             <Heart size={20} fill={post.viewer_reaction ? 'currentColor' : 'none'} />
+            <span>Like</span>
+            <strong className="engagement-count">{post.like_count}</strong>
           </button>
         </div>
         <button
@@ -251,6 +242,7 @@ export function PostCard({
         >
           <MessageCircle size={19} />
           <span>Comment</span>
+          <strong className="engagement-count">{post.comment_count}</strong>
         </button>
         <button
           className="engagement-button"
@@ -258,6 +250,7 @@ export function PostCard({
         >
           <Repeat2 size={19} />
           <span>Share</span>
+          <strong className="engagement-count">{post.share_count}</strong>
         </button>
       </div>
 
@@ -408,11 +401,6 @@ function visibilityLabel(visibility: Post['visibility']) {
   if (visibility === 'public') return 'Public'
   if (visibility === 'private') return 'Only me'
   return 'Friends'
-}
-
-function countLabel(count: number, label: string) {
-  if (count === 1) return `1 ${label}`
-  return `${count} ${label}s`
 }
 
 function formatRelativeTime(value: string) {

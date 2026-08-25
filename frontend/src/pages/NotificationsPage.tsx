@@ -1,5 +1,7 @@
-import { Bell, Check, CheckCheck } from 'lucide-react'
+import { Bell, CalendarCheck, Check, CheckCheck } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { EmptyState } from '../components/EmptyState'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { api } from '../lib/api'
@@ -26,6 +28,9 @@ export function NotificationsPage() {
   }
 
   const unreadCount = items.filter((item) => !item.read_at).length
+  const planningItems = items.filter(isPlanningNotification)
+  const socialItems = items.filter((item) => !isPlanningNotification(item))
+  const messageCount = items.filter((item) => item.notification_type === 'message').length
 
   return (
     <section className="notifications-hub">
@@ -37,7 +42,7 @@ export function NotificationsPage() {
         <div className="metric-strip">
           <Metric value={items.length} label="Total" />
           <Metric value={unreadCount} label="Unread" />
-          <Metric value={items.length - unreadCount} label="Read" />
+          <Metric value={messageCount} label="Messages" />
         </div>
       </header>
 
@@ -46,7 +51,7 @@ export function NotificationsPage() {
         <div className="panel-title-row">
           <div>
             <h2>Recent activity</h2>
-            <span>Friend, message, and post updates.</span>
+            <span>Messages, friends, comments, and shares.</span>
           </div>
           <Bell size={20} />
         </div>
@@ -59,30 +64,71 @@ export function NotificationsPage() {
             title="No notifications"
           />
         ) : null}
-        <div className="notification-list">
-          {items.map((item) => (
-            <article
-              className={item.read_at ? 'notification read' : 'notification'}
-              key={item.id}
-            >
-              <div>
-                <strong>{labelForNotification(item.notification_type)}</strong>
-                <span>{new Date(item.created_at).toLocaleString()}</span>
-              </div>
-              {!item.read_at ? (
-                <button
-                  aria-label="Mark notification as read"
-                  className="icon-button"
-                  title="Mark read"
-                  onClick={() => markRead(item.id)}
-                >
-                  <Check size={18} />
-                </button>
-              ) : null}
-            </article>
-          ))}
+        <div className="notification-grouped-list">
+          <NotificationGroup
+            icon={<CalendarCheck size={18} />}
+            items={planningItems}
+            onMarkRead={markRead}
+            title="Planning"
+          />
+          <NotificationGroup
+            icon={<Bell size={18} />}
+            items={socialItems}
+            onMarkRead={markRead}
+            title="Social"
+          />
         </div>
       </section>
+    </section>
+  )
+}
+
+function NotificationGroup({
+  icon,
+  items,
+  onMarkRead,
+  title,
+}: {
+  icon: ReactNode
+  items: NotificationItem[]
+  onMarkRead: (id: number) => void
+  title: string
+}) {
+  if (items.length === 0) return null
+
+  return (
+    <section className="notification-page-group">
+      <div className="notification-page-group-heading">
+        <span>{icon}</span>
+        <strong>{title}</strong>
+        <small>{items.length}</small>
+      </div>
+      <div className="notification-list">
+        {items.map((item) => (
+          <article
+            className={item.read_at ? 'notification read' : 'notification'}
+            key={item.id}
+          >
+            <div>
+              <strong>{labelForNotification(item.notification_type)}</strong>
+              <span>{new Date(item.created_at).toLocaleString()}</span>
+            </div>
+            <Link className="notification-route-link" to={routeForNotification(item)}>
+              Open
+            </Link>
+            {!item.read_at ? (
+              <button
+                aria-label="Mark notification as read"
+                className="icon-button"
+                title="Mark read"
+                onClick={() => onMarkRead(item.id)}
+              >
+                <Check size={18} />
+              </button>
+            ) : null}
+          </article>
+        ))}
+      </div>
     </section>
   )
 }
@@ -113,4 +159,15 @@ function labelForNotification(type: string) {
     default:
       return type.replaceAll('_', ' ')
   }
+}
+
+function isPlanningNotification(item: NotificationItem) {
+  return ['message', 'post_comment', 'post_share'].includes(item.notification_type)
+}
+
+function routeForNotification(item: NotificationItem) {
+  if (item.notification_type === 'message') return '/chat'
+  if (item.notification_type === 'friend_request' || item.notification_type === 'friend_accept') return '/friends'
+  if (item.notification_type.startsWith('post_')) return '/feed'
+  return '/'
 }

@@ -8,6 +8,7 @@ import { FeedPage } from './pages/FeedPage'
 import { FriendsPage } from './pages/FriendsPage'
 import { LandingPage } from './pages/LandingPage'
 import { NotificationsPage } from './pages/NotificationsPage'
+import { PlanPage } from './pages/PlanPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ReelsPage } from './pages/ReelsPage'
 import { isBusinessHost } from './lib/businessRoutes'
@@ -62,7 +63,8 @@ function App() {
             path="/"
             element={user ? <AppLayout /> : <LandingPage />}
           >
-            <Route index element={<FeedPage />} />
+            <Route index element={<PlanPage />} />
+            <Route path="feed" element={<FeedPage />} />
             <Route path="reels" element={<ReelsPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="friends" element={<FriendsPage />} />

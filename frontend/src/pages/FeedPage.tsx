@@ -27,7 +27,11 @@ const visibilityOptions = [
 
 const feedCachePrefix = 'zumers.feed.'
 const reelsCachePrefix = 'zumers.reels.'
-
+const feedPrompts = [
+  'Anyone up for street food tonight?',
+  'Found a peaceful place nearby.',
+  'Who wants to join this weekend?',
+]
 function readCachedFeed(userID?: number) {
   if (!userID) return null
 
@@ -203,16 +207,28 @@ export function FeedPage() {
 
       <main className="feed-stream">
         <div className="composer-card">
+          <div className="composer-heading">
+            <strong>Share a plan, place, or moment</strong>
+            <span>{visibilityOptions.find((option) => option.value === visibility)?.label}</span>
+          </div>
           <div className="composer-entry">
             <Avatar name={user?.display_name ?? 'U'} src={user?.avatar_url} />
             <textarea
-              placeholder={`What's on your mind${firstName ? `, ${firstName}` : ''}?`}
+              placeholder={`What are you planning${firstName ? `, ${firstName}` : ''}?`}
               value={content}
               onChange={(event) => setContent(event.target.value)}
             />
           </div>
           <ErrorBanner message={error} />
           <form onSubmit={submit}>
+            <div className="composer-prompt-row" aria-label="Post starters">
+              {feedPrompts.map((prompt) => (
+                <button key={prompt} type="button" onClick={() => setContent(prompt)}>
+                  {prompt}
+                </button>
+              ))}
+            </div>
+
             <div className="privacy-segment" aria-label="Post visibility">
               {visibilityOptions.map((option) => (
                 <button

@@ -1,6 +1,16 @@
-import { Camera, ChevronDown, MapPin, Pencil, Plus, Save, Shield } from 'lucide-react'
+import {
+  CalendarCheck,
+  Camera,
+  ChevronDown,
+  MapPin,
+  MessageCircle,
+  Pencil,
+  Save,
+  Shield,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { Avatar } from '../components/AppLayout'
 import { ErrorBanner } from '../components/ErrorBanner'
@@ -10,6 +20,7 @@ import { uploadToCloudinary } from '../lib/cloudinary'
 import type { Post } from '../lib/types'
 
 export function ProfilePage() {
+  const navigate = useNavigate()
   const { user, setUser } = useAuth()
   const [posts, setPosts] = useState<Post[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -135,17 +146,17 @@ export function ProfilePage() {
             <span>@{user.username}</span>
           </div>
           <div className="profile-actions">
-            <button className="primary-button" type="button">
-              <Plus size={18} />
-              <span>Add to story</span>
+            <button className="primary-button" type="button" onClick={() => navigate('/')}>
+              <CalendarCheck size={18} />
+              <span>Plan your day</span>
             </button>
             <button
               className="secondary-button"
               type="button"
-              onClick={() => setEditingProfile(true)}
+              onClick={() => navigate('/feed')}
             >
-              <Pencil size={18} />
-              <span>Edit profile</span>
+              <MessageCircle size={18} />
+              <span>Share update</span>
             </button>
             <button className="secondary-button icon-only" type="button" aria-label="More profile actions">
               <ChevronDown size={20} />

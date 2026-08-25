@@ -8,7 +8,6 @@ import {
   Clock,
   Heart,
   IndianRupee,
-  LocateFixed,
   LogOut,
   MapPin,
   MessageCircle,
@@ -36,22 +35,30 @@ import type {
 } from '../lib/types'
 
 const navItems = [
-  { to: '/', label: 'Feed', icon: Newspaper },
+  { to: '/', label: 'Plan', icon: Sparkles },
+  { to: '/feed', label: 'Feed', icon: Newspaper },
   { to: '/reels', label: 'Reels', icon: Clapperboard },
   { to: '/profile', label: 'Profile', icon: UserIcon },
   { to: '/friends', label: 'Friends', icon: Users },
 ]
 
 const discoveryChips = [
-  'Food nearby',
-  'Fun tonight',
-  'Date plan',
+  'Food',
+  'Street food',
+  'Cafe',
+  'Fun',
+  'Date',
   'Friends',
   'Family',
   'Open now',
   'Under 1000',
-  'Events today',
+  'Events',
   'Peaceful',
+  'Nightlife',
+  'Adventure',
+  'Sports',
+  'Shopping',
+  'Wellness',
 ]
 
 const discoveryRecentSearchesKey = 'zumers.discoveryRecentSearches'
@@ -64,6 +71,13 @@ const discoveryFallbackSearches = [
   'events today nearby',
 ]
 
+export type DiscoverySearchPreset = {
+  autoRun?: boolean
+  chips?: string[]
+  key: number
+  query: string
+}
+
 export function AppLayout() {
   const { user, logout } = useAuth()
   const location = useLocation()
@@ -71,7 +85,7 @@ export function AppLayout() {
   const isReels = location.pathname.startsWith('/reels')
   const isFriends = location.pathname.startsWith('/friends')
   const isChat = location.pathname.startsWith('/chat')
-  const showRightRail = location.pathname === '/'
+  const showRightRail = location.pathname === '/feed'
   const [friends, setFriends] = useState<User[]>([])
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [contactQuery, setContactQuery] = useState('')
@@ -85,7 +99,6 @@ export function AppLayout() {
   const [notificationLoading, setNotificationLoading] = useState(false)
   const [notificationError, setNotificationError] = useState<string | null>(null)
   const [notificationBusy, setNotificationBusy] = useState<string | null>(null)
-  const [discoveryOpen, setDiscoveryOpen] = useState(false)
 
   async function loadNotifications() {
     const [notificationResponse, requestResponse] = await Promise.all([
@@ -105,7 +118,6 @@ export function AppLayout() {
   useEffect(() => {
     setNotificationOpen(false)
     setProfileMenuOpen(false)
-    setDiscoveryOpen(false)
   }, [location.pathname])
 
   useEffect(() => {
@@ -267,19 +279,7 @@ export function AppLayout() {
       <header className="topbar">
         <div className="topbar-left">
           <div className="brand-mark">Z</div>
-          <button
-            aria-label="Open discovery search"
-            className="search-pill search-link"
-            type="button"
-            onClick={() => {
-              setDiscoveryOpen(true)
-              setNotificationOpen(false)
-              setProfileMenuOpen(false)
-            }}
-          >
-            <Search size={18} />
-            <span>What can we do?</span>
-          </button>
+          <strong className="topbar-product-name">Zumers</strong>
         </div>
 
         <nav className="topbar-tabs" aria-label="Primary sections">
@@ -294,6 +294,7 @@ export function AppLayout() {
               to={item.to}
             >
               <item.icon size={25} />
+              <span>{item.label}</span>
             </NavLink>
           ))}
         </nav>
@@ -510,10 +511,6 @@ export function AppLayout() {
         <Outlet />
       </main>
 
-      {discoveryOpen ? (
-        <DiscoverySearchOverlay onClose={() => setDiscoveryOpen(false)} />
-      ) : null}
-
       {showRightRail ? (
         <aside className="right-rail" aria-label="Social activity">
           <section className="right-rail-section desktop-only">
@@ -605,7 +602,17 @@ export function AppLayout() {
   )
 }
 
-function DiscoverySearchOverlay({ onClose }: { onClose: () => void }) {
+export function DiscoverySearchPanel({
+  autoFocus = false,
+  onClose,
+  preset,
+  title = 'Find the move',
+}: {
+  autoFocus?: boolean
+  onClose?: () => void
+  preset?: DiscoverySearchPreset
+  title?: string
+}) {
   const [query, setQuery] = useState('')
   const [selectedChips, setSelectedChips] = useState<string[]>([])
   const [recentSearches, setRecentSearches] = useState<string[]>(() => loadDiscoveryRecentSearches())
@@ -616,15 +623,23 @@ function DiscoverySearchOverlay({ onClose }: { onClose: () => void }) {
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null)
   const [locationBusy, setLocationBusy] = useState(false)
   const [locationError, setLocationError] = useState<string | null>(null)
+  const [radiusKm, setRadiusKm] = useState(5)
 
   useEffect(() => {
-    document.body.classList.add('modal-scroll-lock')
-    return () => document.body.classList.remove('modal-scroll-lock')
-  }, [])
+    if (!preset) return
+    const presetChips = preset.chips ?? []
+    setQuery(preset.query)
+    setSelectedChips(presetChips)
+    setResults([])
+    setSearched(false)
+    setError(null)
+    if (preset.autoRun) {
+      void runSearch(preset.query, presetChips)
+    }
+  }, [preset])
 
-  async function search(event?: FormEvent<HTMLFormElement>) {
-    event?.preventDefault()
-    const trimmedQuery = query.trim()
+  async function runSearch(searchQuery: string, chips: string[]) {
+    const trimmedQuery = searchQuery.trim()
     if (trimmedQuery) {
       setRecentSearches(saveDiscoveryRecentSearch(trimmedQuery))
     }
@@ -633,10 +648,11 @@ function DiscoverySearchOverlay({ onClose }: { onClose: () => void }) {
     setSearched(true)
     try {
       const response = await api.discoverySearch({
-        query,
-        chips: selectedChips,
+        query: searchQuery,
+        chips,
         latitude: location?.latitude,
         longitude: location?.longitude,
+        radiusKm: location ? radiusKm : undefined,
         limit: 20,
       })
       setResults(response.results)
@@ -645,6 +661,11 @@ function DiscoverySearchOverlay({ onClose }: { onClose: () => void }) {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function search(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault()
+    await runSearch(query, selectedChips)
   }
 
   function toggleChip(chip: string) {
@@ -679,97 +700,137 @@ function DiscoverySearchOverlay({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="discovery-overlay" role="dialog" aria-modal="true" aria-label="Discovery search">
-      <section className="discovery-modal">
-        <div className="discovery-header">
-          <div>
-            <span><Sparkles size={16} /> Zumers Search</span>
-            <h2>What can we do?</h2>
-          </div>
+    <section className="discovery-modal">
+      <div className="discovery-header">
+        <div>
+          <span><Sparkles size={16} /> Zumers</span>
+          <h2>{title}</h2>
+        </div>
+        {onClose ? (
           <button className="icon-button quiet" type="button" aria-label="Close search" onClick={onClose}>
             <X size={20} />
           </button>
-        </div>
+        ) : null}
+      </div>
 
-        <form className="discovery-search-form" onSubmit={search}>
-          <label>
-            <Search size={19} />
-            <input
-              autoFocus
-              placeholder="momos near me, fun tonight, peaceful place for 2"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
-          <button className="primary-button" disabled={loading} type="submit">
-            {loading ? 'Searching' : 'Search'}
-          </button>
-        </form>
-
-        <div className="discovery-toolbar">
-          <div className="discovery-chip-row" aria-label="Discovery filters">
-            {discoveryChips.map((chip) => (
+      <form className="discovery-search-form" onSubmit={search}>
+        <label>
+          <Search size={19} />
+          <div className="discovery-search-composer">
+            {selectedChips.map((chip) => (
               <button
-                className={selectedChips.includes(chip) ? 'active' : ''}
+                aria-label={`Remove ${chip}`}
+                className="discovery-search-tag"
                 key={chip}
+                title={`Remove ${chip}`}
                 type="button"
                 onClick={() => toggleChip(chip)}
               >
-                {chip}
+                #{chip}
               </button>
             ))}
+            <input
+              autoFocus={autoFocus}
+              placeholder={
+                selectedChips.length
+                  ? 'add more detail'
+                  : 'momos near me, date tonight, 4 friends under 1000'
+              }
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
           </div>
           <button
-            className={location ? 'discovery-location active' : 'discovery-location'}
+            aria-label={location ? 'Location enabled' : 'Use current location'}
+            className={
+              location ? 'discovery-inline-location active' : 'discovery-inline-location'
+            }
             disabled={locationBusy}
+            title={location ? 'Location enabled' : locationBusy ? 'Locating' : 'Use location'}
             type="button"
             onClick={useCurrentLocation}
           >
-            <LocateFixed size={17} />
-            <span>{location ? 'Location on' : locationBusy ? 'Locating' : 'Use location'}</span>
+            <MapPin size={17} />
           </button>
+        </label>
+        <button className="primary-button" disabled={loading} type="submit">
+          {loading ? 'Finding' : 'Go'}
+        </button>
+      </form>
+
+      <div className={location ? 'discovery-nearby-row active' : 'discovery-nearby-row'}>
+        <div>
+          <span>{location ? 'Search radius' : 'Tap the Location Pin to Search near you'}</span>
+          {location ? (
+            <label>
+              <input
+                max="25"
+                min="1"
+                step="1"
+                type="range"
+                value={radiusKm}
+                onChange={(event) => setRadiusKm(Number(event.target.value))}
+              />
+              <strong>{radiusKm} km</strong>
+            </label>
+          ) : null}
         </div>
+      </div>
 
-        {locationError ? <div className="inline-error">{locationError}</div> : null}
-        {error ? <div className="inline-error">{error}</div> : null}
+      <div className="discovery-toolbar">
+        <div className="discovery-chip-row" aria-label="Discovery filters">
+          {discoveryChips.map((chip) => (
+            <button
+              className={selectedChips.includes(chip) ? 'active' : ''}
+              key={chip}
+              type="button"
+              onClick={() => toggleChip(chip)}
+            >
+              {chip}
+            </button>
+          ))}
+        </div>
+      </div>
 
-        <div className="discovery-results">
-          {loading ? (
-            <div className="discovery-state">Searching plans</div>
-          ) : null}
-          {!loading && !searched ? (
-            <div className="discovery-suggestion-panel">
-              <span>{recentSearches.length ? 'Recent searches' : 'Try searching'}</span>
-              <div className="discovery-suggestions">
-                {(recentSearches.length ? recentSearches : discoveryFallbackSearches).map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => {
-                      setQuery(item)
-                      setSearched(false)
-                    }}
-                  >
-                    <Search size={16} />
-                    <span>{item}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {!loading && searched && results.length === 0 ? (
-            <div className="discovery-state">No matching plans found</div>
-          ) : null}
-          {!loading && results.length > 0 ? (
-            <div className="discovery-result-list">
-              {results.map((result) => (
-                <DiscoveryResultCard key={result.id} result={result} />
+      {locationError ? <div className="inline-error">{locationError}</div> : null}
+      {error ? <div className="inline-error">{error}</div> : null}
+
+      <div className="discovery-results">
+        {loading ? (
+          <div className="discovery-state">Finding plans</div>
+        ) : null}
+        {!loading && !searched ? (
+          <div className="discovery-suggestion-panel">
+            <span>{recentSearches.length ? 'Recent' : 'Try'}</span>
+            <div className="discovery-suggestions">
+              {(recentSearches.length ? recentSearches : discoveryFallbackSearches).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => {
+                    setQuery(item)
+                    setSearched(false)
+                  }}
+                >
+                  <Search size={16} />
+                  <span>{item}</span>
+                </button>
               ))}
             </div>
-          ) : null}
-        </div>
-      </section>
-    </div>
+          </div>
+        ) : null}
+        {!loading && searched && results.length === 0 ? (
+          <div className="discovery-state">No matching plans found</div>
+        ) : null}
+        {!loading && results.length > 0 ? (
+          <div className="discovery-result-list">
+            {results.map((result) => (
+              <DiscoveryResultCard key={result.id} result={result} />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </section>
   )
 }
 
@@ -924,11 +985,13 @@ function DiscoveryResultCard({ result }: { result: DiscoverySearchResult }) {
             {result.next_event_title ? <span>{result.next_event_title}</span> : null}
           </div>
         ) : null}
-        <div className="discovery-reasons">
-          {result.reasons.slice(0, 3).map((reason) => (
-            <span key={reason}>{reason}</span>
-          ))}
-        </div>
+        {result.reasons.length > 0 ? (
+          <div className="discovery-reasons" aria-label="Why this matched">
+            {result.reasons.slice(0, 2).map((reason) => (
+              <span key={reason}>{reason}</span>
+            ))}
+          </div>
+        ) : null}
         <div className="discovery-actions">
           <button
             type="button"

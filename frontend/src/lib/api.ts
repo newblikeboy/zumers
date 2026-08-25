@@ -301,6 +301,7 @@ export const api = {
     chips?: string[]
     latitude?: number
     longitude?: number
+    radiusKm?: number
     limit?: number
   }) => {
     const query = new URLSearchParams()
@@ -308,6 +309,7 @@ export const api = {
     if (params.chips?.length) query.set('chips', params.chips.join(','))
     if (typeof params.latitude === 'number') query.set('latitude', String(params.latitude))
     if (typeof params.longitude === 'number') query.set('longitude', String(params.longitude))
+    if (typeof params.radiusKm === 'number') query.set('radius_km', String(params.radiusKm))
     if (params.limit) query.set('limit', String(params.limit))
     return apiRequest<DiscoverySearchResponse>(`/discovery/search?${query.toString()}`)
   },

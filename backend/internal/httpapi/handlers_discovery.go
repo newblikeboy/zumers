@@ -27,6 +27,7 @@ type discoverySearchIntent struct {
 	OpenNow    bool     `json:"open_now"`
 	Latitude   *float64 `json:"latitude,omitempty"`
 	Longitude  *float64 `json:"longitude,omitempty"`
+	RadiusKM   *float64 `json:"radius_km,omitempty"`
 	Budget     *float64 `json:"budget,omitempty"`
 	GroupSize  *int     `json:"group_size,omitempty"`
 	Duration   *int     `json:"duration_minutes,omitempty"`
@@ -588,6 +589,9 @@ func scoreDiscoveryCandidate(candidate discoveryCandidate, intent discoverySearc
 		distance := haversineKM(*intent.Latitude, *intent.Longitude, candidate.latitude.Float64, candidate.longitude.Float64)
 		rounded := math.Round(distance*10) / 10
 		result.DistanceKM = &rounded
+		if intent.RadiusKM != nil && distance > *intent.RadiusKM {
+			return result, false
+		}
 		switch {
 		case distance <= 2:
 			score += 18
@@ -661,7 +665,8 @@ func scoreDiscoveryCandidate(candidate discoveryCandidate, intent discoverySearc
 }
 
 func parseDiscoverySearchIntent(r *http.Request, query string) discoverySearchIntent {
-	combined := strings.ToLower(strings.TrimSpace(query + " " + r.URL.Query().Get("chips")))
+	chips := r.URL.Query().Get("chips")
+	combined := strings.ToLower(strings.TrimSpace(query + " " + chips))
 	intent := discoverySearchIntent{
 		Categories: make([]string, 0),
 		Moods:      make([]string, 0),
@@ -672,7 +677,7 @@ func parseDiscoverySearchIntent(r *http.Request, query string) discoverySearchIn
 
 	intent.Categories = appendMatches(intent.Categories, combined, map[string][]string{
 		"Street food":              {"street food", "momos", "chaat", "golgappe", "roll", "snack", "spicy"},
-		"Restaurant or cafe":       {"restaurant", "cafe", "coffee", "dinner", "lunch", "breakfast", "date cafe", "food"},
+		"Restaurant or cafe":       {"restaurant", "cafe", "coffee", "dinner", "lunch", "breakfast", "date cafe"},
 		"Fun and entertainment":    {"fun", "bowling", "arcade", "gaming", "movie", "cinema", "karaoke", "escape"},
 		"Adventure":                {"adventure", "go kart", "karting", "paintball", "trampoline", "trek", "camp"},
 		"Nightlife":                {"night", "club", "pub", "bar", "dj", "party", "late night"},
@@ -685,6 +690,10 @@ func parseDiscoverySearchIntent(r *http.Request, query string) discoverySearchIn
 		"Wellness and self care":   {"spa", "salon", "massage", "wellness", "self care"},
 		"Learning and hobbies":     {"class", "hobby", "learn", "art", "dance", "music", "cooking", "pottery"},
 	})
+	if discoveryHasBroadFoodIntent(query, chips) {
+		intent.Categories = appendDiscoveryValue(intent.Categories, "Street food")
+		intent.Categories = appendDiscoveryValue(intent.Categories, "Restaurant or cafe")
+	}
 	intent.Moods = appendMatches(intent.Moods, combined, map[string][]string{
 		"chill":      {"chill", "relax"},
 		"fun":        {"fun", "friends"},
@@ -724,6 +733,7 @@ func parseDiscoverySearchIntent(r *http.Request, query string) discoverySearchIn
 		strings.Contains(combined, "nearby now")
 	intent.Latitude = queryFloat(r, "latitude")
 	intent.Longitude = queryFloat(r, "longitude")
+	intent.RadiusKM = queryRadiusKM(r, "radius_km")
 	intent.Budget = parseDiscoveryBudget(combined)
 	intent.GroupSize = parseDiscoveryGroupSize(combined)
 	intent.Duration = parseDiscoveryDuration(combined)
@@ -750,6 +760,33 @@ func appendMatches(values []string, text string, patterns map[string][]string) [
 	return values
 }
 
+func appendDiscoveryValue(values []string, value string) []string {
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
+}
+
+func discoveryHasBroadFoodIntent(query string, chips string) bool {
+	for _, chip := range strings.Split(strings.ToLower(chips), ",") {
+		chip = strings.TrimSpace(chip)
+		if chip == "food" || chip == "food nearby" {
+			return true
+		}
+	}
+
+	normalized := strings.ToLower(query)
+	if !strings.Contains(normalized, "food") {
+		return false
+	}
+	for _, narrow := range []string{"street food", "food walk", "food court"} {
+		normalized = strings.ReplaceAll(normalized, narrow, "")
+	}
+	return strings.Contains(normalized, "food")
+}
+
 func queryFloat(r *http.Request, key string) *float64 {
 	raw := strings.TrimSpace(r.URL.Query().Get(key))
 	if raw == "" {
@@ -760,6 +797,20 @@ func queryFloat(r *http.Request, key string) *float64 {
 		return nil
 	}
 	return &value
+}
+
+func queryRadiusKM(r *http.Request, key string) *float64 {
+	value := queryFloat(r, key)
+	if value == nil {
+		return nil
+	}
+	if *value < 1 {
+		*value = 1
+	}
+	if *value > 50 {
+		*value = 50
+	}
+	return value
 }
 
 func parseDiscoveryBudget(text string) *float64 {

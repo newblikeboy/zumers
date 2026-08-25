@@ -1,5 +1,6 @@
 import {
   BadgePlus,
+  CalendarCheck,
   ChevronDown,
   ChevronUp,
   Heart,
@@ -25,6 +26,13 @@ import { cloudinaryDeliveryUrl } from '../lib/cloudinary'
 import type { Comment, Post } from '../lib/types'
 
 const reelsCachePrefix = 'zumers.reels.'
+const reelFilters = [
+  { value: 'all', label: 'For you', icon: Star },
+  { value: 'planning', label: 'Moves', icon: BadgePlus },
+  { value: 'mine', label: 'Mine', icon: UserCircle },
+] as const
+
+type ReelFilter = (typeof reelFilters)[number]['value']
 
 function readCachedReels(userID?: number) {
   if (!userID) return null
@@ -69,6 +77,8 @@ export function ReelsPage() {
   const [comments, setComments] = useState<Comment[]>([])
   const [commentsLoading, setCommentsLoading] = useState(false)
   const [sharePost, setSharePost] = useState<Post | null>(null)
+  const [shareDraft, setShareDraft] = useState('')
+  const [activeReelFilter, setActiveReelFilter] = useState<ReelFilter>('all')
   const [reactionBusyIDs, setReactionBusyIDs] = useState<Set<number>>(() => new Set())
   const videoRefs = useRef(new Map<string, HTMLVideoElement>())
 
@@ -111,7 +121,7 @@ export function ReelsPage() {
     return () => query.removeEventListener('change', update)
   }, [])
 
-  const reels = useMemo(
+  const allReels = useMemo(
     () =>
       posts.flatMap((post) =>
         reelSourcePosts(post).flatMap((sourcePost) =>
@@ -126,9 +136,22 @@ export function ReelsPage() {
       ),
     [posts],
   )
+  const reels = useMemo(
+    () =>
+      allReels.filter((reel) => {
+        if (activeReelFilter === 'planning') return isPlanningReelPost(reel.post)
+        if (activeReelFilter === 'mine') return reel.post.author_id === user?.id
+        return true
+      }),
+    [activeReelFilter, allReels, user?.id],
+  )
 
   useEffect(() => {
-    if (reels.length > 0 && !activeReelID) {
+    if (reels.length === 0) {
+      setActiveReelID(null)
+      return
+    }
+    if (!activeReelID || !reels.some((reel) => reel.id === activeReelID)) {
       setActiveReelID(reels[0].id)
     }
   }, [activeReelID, reels])
@@ -263,6 +286,7 @@ export function ReelsPage() {
         return next
       })
       setSharePost(null)
+      setShareDraft('')
       formElement.reset()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not share reel')
@@ -275,6 +299,8 @@ export function ReelsPage() {
     reels.findIndex((reel) => reel.id === activeReelID),
   )
   const activeReel = reels[activeReelIndex] ?? reels[0]
+  const planningReelCount = allReels.filter((reel) => isPlanningReelPost(reel.post)).length
+  const myReelCount = allReels.filter((reel) => reel.post.author_id === user?.id).length
 
   function scrollToReel(index: number) {
     const reel = reels[index]
@@ -283,31 +309,61 @@ export function ReelsPage() {
     setPaused(false)
   }
 
+  function openShare(post: Post, draft = '') {
+    setShareDraft(draft)
+    setSharePost(post)
+  }
+
+  function reelFilterCount(filter: ReelFilter) {
+    if (filter === 'planning') return planningReelCount
+    if (filter === 'mine') return myReelCount
+    return allReels.length
+  }
+
   return (
     <section className={drawerOpen ? 'reels-page has-drawer' : 'reels-page'}>
       <aside className="reels-nav">
         <h1>Reels</h1>
         <nav aria-label="Reels navigation">
-          <button className="reels-nav-item active" type="button">
-            <Star size={23} />
-            <span>For you</span>
-          </button>
-          <button className="reels-nav-item" type="button">
-            <BadgePlus size={23} />
-            <span>Following</span>
-          </button>
-          <button className="reels-nav-item" type="button">
-            <UserCircle size={23} />
-            <span>Profile</span>
-          </button>
+          {reelFilters.map((filter) => {
+            const Icon = filter.icon
+            return (
+              <button
+                className={activeReelFilter === filter.value ? 'reels-nav-item active' : 'reels-nav-item'}
+                key={filter.value}
+                type="button"
+                onClick={() => setActiveReelFilter(filter.value)}
+              >
+                <Icon size={23} />
+                <span>{filter.label}</span>
+                <strong>{reelFilterCount(filter.value)}</strong>
+              </button>
+            )
+          })}
         </nav>
       </aside>
 
         <div className="reels-stage">
         <ErrorBanner message={error} />
+        <div className="reels-mobile-filter-bar" aria-label="Reel filters">
+          {reelFilters.map((filter) => {
+            const Icon = filter.icon
+            return (
+              <button
+                className={activeReelFilter === filter.value ? 'active' : ''}
+                key={filter.value}
+                type="button"
+                onClick={() => setActiveReelFilter(filter.value)}
+              >
+                <Icon size={15} />
+                <span>{filter.label}</span>
+              </button>
+            )
+          })}
+        </div>
         {loading && reels.length === 0 ? <ReelsSkeleton /> : null}
         {!loading && reels.length === 0 ? (
-          <EmptyState title="No reels yet. Upload a video post to create one." />
+          <EmptyState title={activeReelFilter === 'all' ? 'No reels yet. Upload a video post to create one.' : 'No matching reels'} />
         ) : null}
 
         <div className="reel-stack">
@@ -378,9 +434,16 @@ export function ReelsPage() {
                   <MessageCircle size={22} />
                   <span>{compactCount(reel.post.comment_count)}</span>
                 </button>
-                <button className="reel-action" onClick={() => setSharePost(reel.post)}>
+                <button className="reel-action" onClick={() => openShare(reel.post)}>
                   <Repeat2 size={22} />
                   <span>{compactCount(reel.post.share_count)}</span>
+                </button>
+                <button
+                  className="reel-action reel-plan-action"
+                  onClick={() => openShare(reel.post, 'Who wants to make this a plan?')}
+                >
+                  <CalendarCheck size={22} />
+                  <span>Plan</span>
                 </button>
               </div>
             </article>
@@ -461,7 +524,10 @@ export function ReelsPage() {
             <button
               className="icon-button quiet"
               title="Close share"
-              onClick={() => setSharePost(null)}
+              onClick={() => {
+                setSharePost(null)
+                setShareDraft('')
+              }}
             >
               <X size={18} />
             </button>
@@ -470,6 +536,8 @@ export function ReelsPage() {
             <textarea
               name="share_content"
               placeholder="Say something about this reel"
+              value={shareDraft}
+              onChange={(event) => setShareDraft(event.target.value)}
             />
             <button className="primary-button">
               <Repeat2 size={18} />
@@ -494,6 +562,25 @@ function reelSourcePosts(post: Post) {
     sources.push(post.shared_post)
   }
   return sources
+}
+
+function isPlanningReelPost(post: Post) {
+  const text = [post.content, post.shared_post?.content].filter(Boolean).join(' ').toLowerCase()
+  return [
+    'plan',
+    'join',
+    'tonight',
+    'today',
+    'nearby',
+    'food',
+    'cafe',
+    'momos',
+    'event',
+    'place',
+    'weekend',
+    'meet',
+    'try',
+  ].some((keyword) => text.includes(keyword))
 }
 
 function optimisticPostReaction(post: Post, reactionType?: string): Post {

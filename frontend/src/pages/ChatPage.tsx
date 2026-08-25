@@ -531,7 +531,6 @@ export function ChatPage() {
     () => messages.find((message) => message.id === selectedMessageID) ?? null,
     [messages, selectedMessageID],
   )
-
   return (
     <section
       className={

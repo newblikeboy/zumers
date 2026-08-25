@@ -16,27 +16,27 @@ const moments = [
   {
     icon: Compass,
     title: 'Find the move',
-    text: 'See nearby ideas, friend plans, quick reels, and posts built around what people are actually doing.',
+    text: 'Search mood, budget, time, group, or food.',
   },
   {
     icon: Vote,
-    title: 'Decide together',
-    text: 'Turn group indecision into simple choices, reactions, comments, and conversations.',
+    title: 'Share the card',
+    text: 'Send one option to a friend or group.',
   },
   {
     icon: CalendarCheck,
-    title: 'Make today happen',
-    text: 'Keep plans social, visible, and easy to act on without jumping between apps.',
+    title: 'Go',
+    text: 'Book, save, vote, or move to chat.',
   },
 ]
 
 const signals = [
-  'Weekend plans',
-  'Friend votes',
-  'Local ideas',
-  'Reels from people',
-  'Chat decisions',
-  'Shared moments',
+  'Momos',
+  'Date',
+  'Tonight',
+  'Friends',
+  'Under 500',
+  'Open now',
 ]
 
 export function LandingPage() {
@@ -65,17 +65,16 @@ export function LandingPage() {
 
         <div className="landing-hero-content">
           <p className="landing-kicker">
-            <Sparkles size={18} /> Social decisions for real life
+            <Sparkles size={18} /> Find the move
           </p>
           <h1>Zumers</h1>
-          <p className="landing-tagline">Never wonder what to do today.</p>
+          <p className="landing-tagline">What now?</p>
           <p className="landing-copy">
-            A social decision platform where friends discover ideas, vote on
-            plans, share reels, and move from "what now?" to "let's go."
+            Search nearby plans by mood, people, time, and budget.
           </p>
           <div className="landing-actions">
             <Link className="landing-primary" to="/signup">
-              Create your Zumers profile
+              Start
             </Link>
             <Link className="landing-secondary" to="/login">
               I already have an account
@@ -93,10 +92,9 @@ export function LandingPage() {
       <section className="landing-section landing-two-column" id="how-it-works">
         <div>
           <p className="landing-section-label">How it works</p>
-          <h2>From "any plans?" to a shared decision.</h2>
+          <h2>Search. Pick. Go.</h2>
           <p>
-            Zumers brings feed, reels, friends, and chat into one flow so people
-            can discover, compare, and commit without losing momentum.
+            One engine for nearby things to do.
           </p>
         </div>
         <div className="landing-flow">
@@ -121,13 +119,13 @@ export function LandingPage() {
             <Users size={20} />
           </div>
           <div className="landing-composer">
-            <span>What should we do today?</span>
-            <button>Post</button>
+            <span>momos near me</span>
+            <button>Go</button>
           </div>
           <div className="landing-plan-card">
             <div>
               <strong>Rooftop dinner or late show?</strong>
-              <small>12 friends deciding</small>
+              <small>4 friends voting</small>
             </div>
             <div className="landing-votes">
               <span style={{ width: '74%' }} />
@@ -135,7 +133,7 @@ export function LandingPage() {
           </div>
           <div className="landing-chat-preview">
             <MessageCircle size={18} />
-            <span>Abhishek: I am in for dinner</span>
+            <span>Perfect for the group</span>
           </div>
           <div className="landing-reel-preview">
             <PlayCircle size={34} />
@@ -143,23 +141,23 @@ export function LandingPage() {
         </div>
         <div className="landing-benefits">
           <p className="landing-section-label">Why Zumers</p>
-          <h2>Built for the messy middle between discovery and action.</h2>
+          <h2>Built for the moment before you leave.</h2>
           <ul>
             <li>
               <CheckCircle2 size={20} />
-              One place for friends, posts, reels, and plan-making.
+              Search understands intent, not just business names.
             </li>
             <li>
               <CheckCircle2 size={20} />
-              Decisions feel social, not like another task list.
+              Every result is shareable and votable.
             </li>
             <li>
               <CheckCircle2 size={20} />
-              Mobile-first flows for quick plans on the move.
+              Booking, save, and chat stay one tap away.
             </li>
           </ul>
           <Link className="landing-primary landing-inline-cta" to="/signup">
-            Start deciding with friends
+            Try Zumers
           </Link>
         </div>
       </section>
