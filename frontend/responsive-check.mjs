@@ -31,7 +31,6 @@ const viewports = [
 
 async function main() {
   const auth = await signup()
-  await createVideoPost(auth.access_token)
   const browser = await chromium.launch()
   const results = []
 
@@ -103,36 +102,6 @@ async function main() {
 
   await browser.close()
   console.log(JSON.stringify(results, null, 2))
-}
-
-async function createVideoPost(accessToken) {
-  const response = await fetch(`${apiBase}/posts`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      content: 'Responsive reels verification video',
-      visibility: 'public',
-      media: [
-        {
-          media_type: 'video',
-          cloudinary_public_id: `responsive-reel-${stamp}`,
-          secure_url: 'https://res.cloudinary.com/demo/video/upload/dog.mp4',
-          thumbnail_url: 'https://res.cloudinary.com/demo/video/upload/so_0,f_jpg/dog.jpg',
-          width: 1280,
-          height: 720,
-          duration_seconds: 12,
-          display_order: 0,
-        },
-      ],
-    }),
-  })
-  const data = await response.json().catch(() => null)
-  if (!response.ok) {
-    throw new Error(data?.error ?? 'video post setup failed')
-  }
 }
 
 async function signup() {
