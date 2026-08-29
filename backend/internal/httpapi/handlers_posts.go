@@ -389,17 +389,128 @@ func (s *Server) listPosts(r *http.Request, condition string, args ...any) ([]po
 	if err := s.addPostEngagement(r.Context(), currentUserID(r), postPointers); err != nil {
 		return nil, err
 	}
+	sharedPostIDs := make([]int64, 0)
+	seenSharedPostIDs := make(map[int64]struct{})
 	for index := range posts {
 		if posts[index].SharedPostID == nil {
 			continue
 		}
-		shared, err := s.getPostForViewer(r.Context(), *posts[index].SharedPostID, currentUserID(r), false)
-		if err == nil {
-			posts[index].SharedPost = &shared
+		sharedID := *posts[index].SharedPostID
+		if _, exists := seenSharedPostIDs[sharedID]; exists {
+			continue
+		}
+		seenSharedPostIDs[sharedID] = struct{}{}
+		sharedPostIDs = append(sharedPostIDs, sharedID)
+	}
+	sharedPostsByID, err := s.getPostsForViewerByID(r.Context(), sharedPostIDs, currentUserID(r))
+	if err != nil {
+		return nil, err
+	}
+	for index := range posts {
+		if posts[index].SharedPostID == nil {
+			continue
+		}
+		if shared, ok := sharedPostsByID[*posts[index].SharedPostID]; ok {
+			sharedCopy := shared
+			posts[index].SharedPost = &sharedCopy
 		}
 	}
 
 	return posts, nil
+}
+
+func (s *Server) getPostsForViewerByID(ctx context.Context, postIDs []int64, viewerID int64) (map[int64]postResponse, error) {
+	postsByID := make(map[int64]postResponse)
+	if len(postIDs) == 0 {
+		return postsByID, nil
+	}
+
+	placeholders := make([]string, 0, len(postIDs))
+	args := make([]any, 0, len(postIDs)+1)
+	seen := make(map[int64]struct{}, len(postIDs))
+	for _, postID := range postIDs {
+		if postID <= 0 {
+			continue
+		}
+		if _, exists := seen[postID]; exists {
+			continue
+		}
+		seen[postID] = struct{}{}
+		args = append(args, postID)
+		placeholders = append(placeholders, "$"+strconv.Itoa(len(args)))
+	}
+	if len(args) == 0 {
+		return postsByID, nil
+	}
+	viewerPlaceholder := "$" + strconv.Itoa(len(args)+1)
+	args = append(args, viewerID)
+
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT p.id, p.author_id, p.content, p.visibility, p.shared_post_id, p.created_at, p.updated_at
+		 FROM posts p
+		 WHERE p.id IN (`+strings.Join(placeholders, ",")+`)
+		   AND p.deleted_at IS NULL
+		   AND (
+		     p.author_id = `+viewerPlaceholder+`
+		     OR p.visibility = 'public'
+		     OR (
+		       p.visibility = 'friends'
+		       AND EXISTS (
+		         SELECT 1 FROM friendships f
+		         WHERE (f.user_id = `+viewerPlaceholder+` AND f.friend_id = p.author_id)
+		            OR (f.friend_id = `+viewerPlaceholder+` AND f.user_id = p.author_id)
+		       )
+		     )
+		   )`,
+		args...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	posts := make([]postResponse, 0)
+	loadedPostIDs := make([]int64, 0)
+	authorIDs := make([]int64, 0)
+	for rows.Next() {
+		post, err := scanPost(rows)
+		if err != nil {
+			return nil, err
+		}
+		posts = append(posts, post)
+		loadedPostIDs = append(loadedPostIDs, post.ID)
+		authorIDs = append(authorIDs, post.AuthorID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	mediaByPostID, err := s.getPostMediaByPostID(ctx, loadedPostIDs)
+	if err != nil {
+		return nil, err
+	}
+	authorsByID, err := s.getUserResponsesByID(ctx, authorIDs)
+	if err != nil {
+		return nil, err
+	}
+	postPointers := make([]*postResponse, 0, len(posts))
+	for index := range posts {
+		posts[index].Media = mediaByPostID[posts[index].ID]
+		if author, ok := authorsByID[posts[index].AuthorID]; ok {
+			posts[index].Author = &author
+		}
+		postPointers = append(postPointers, &posts[index])
+	}
+	if err := s.addPostEngagement(ctx, viewerID, postPointers); err != nil {
+		return nil, err
+	}
+	for _, post := range posts {
+		post.SharedPost = nil
+		postsByID[post.ID] = post
+	}
+
+	return postsByID, nil
 }
 
 type postScanner interface {

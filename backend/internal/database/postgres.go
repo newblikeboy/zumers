@@ -24,6 +24,7 @@ func OpenPostgres(ctx context.Context, cfg config.PostgresConfig) (*sql.DB, erro
 
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(25)
+	db.SetConnMaxIdleTime(2 * time.Minute)
 	db.SetConnMaxLifetime(5 * time.Minute)
 
 	if err := db.PingContext(ctx); err != nil {

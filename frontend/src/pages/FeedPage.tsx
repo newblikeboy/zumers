@@ -20,18 +20,15 @@ import { cloudinaryDeliveryUrl, uploadToCloudinary } from '../lib/cloudinary'
 import type { Post, PostMediaInput } from '../lib/types'
 
 const visibilityOptions = [
-  { value: 'friends', label: 'Friends', icon: Users },
   { value: 'public', label: 'Public', icon: Globe2 },
+  { value: 'friends', label: 'Friends', icon: Users },
   { value: 'private', label: 'Only me', icon: LockKeyhole },
 ] as const
 
+const pulseFilters = ['For You', 'Friends', 'Nearby', 'Following']
 const feedCachePrefix = 'zumers.feed.'
 const reelsCachePrefix = 'zumers.reels.'
-const feedPrompts = [
-  'Anyone up for street food tonight?',
-  'Found a peaceful place nearby.',
-  'Who wants to join this weekend?',
-]
+
 function readCachedFeed(userID?: number) {
   if (!userID) return null
 
@@ -66,6 +63,7 @@ export function FeedPage() {
     'friends',
   )
   const [media, setMedia] = useState<PostMediaInput[]>([])
+  const [activeFilter, setActiveFilter] = useState(pulseFilters[0])
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -182,53 +180,45 @@ export function FeedPage() {
     )
   }
 
-  const firstName = user?.display_name?.split(' ')[0]
   const canPost = content.trim().length > 0 || media.length > 0
   const showInitialSkeleton = loading && posts.length === 0
-  const storyPosts = posts
-    .filter((post) => (post.media ?? []).length > 0)
-    .slice(0, 5)
+  const planReadyPosts = posts.filter((post) => isPlanReadyPost(post)).slice(0, 3)
+  const mediaPostCount = posts.filter((post) => (post.media ?? []).length > 0).length
 
   return (
-    <section className="social-home">
-      <aside className="home-rail left-rail">
-        <div className="rail-card profile-mini">
-          <Avatar name={user?.display_name ?? 'U'} src={user?.avatar_url} />
-          <div>
-            <strong>{user?.display_name}</strong>
-            <span>@{user?.username}</span>
-          </div>
-        </div>
-        <div className="rail-card">
-          <strong>Shortcuts</strong>
-          <span>Friends, reels, profile, and recent conversations.</span>
-        </div>
-      </aside>
-
+    <section className="social-home pulse-page">
       <main className="feed-stream">
+        <div className="pulse-filter-tabs" role="tablist" aria-label="Feed filters">
+          {pulseFilters.map((filter) => (
+            <button
+              className={activeFilter === filter ? 'active' : ''}
+              key={filter}
+              role="tab"
+              type="button"
+              aria-selected={activeFilter === filter}
+              onClick={() => setActiveFilter(filter)}
+            >
+              {filter}
+            </button>
+          ))}
+        </div>
+
         <div className="composer-card">
           <div className="composer-heading">
-            <strong>Share a plan, place, or moment</strong>
+            <strong>Share</strong>
             <span>{visibilityOptions.find((option) => option.value === visibility)?.label}</span>
           </div>
           <div className="composer-entry">
             <Avatar name={user?.display_name ?? 'U'} src={user?.avatar_url} />
             <textarea
-              placeholder={`What are you planning${firstName ? `, ${firstName}` : ''}?`}
+              aria-label="Share to Feed"
+              placeholder="What's on your mind?"
               value={content}
               onChange={(event) => setContent(event.target.value)}
             />
           </div>
           <ErrorBanner message={error} />
           <form onSubmit={submit}>
-            <div className="composer-prompt-row" aria-label="Post starters">
-              {feedPrompts.map((prompt) => (
-                <button key={prompt} type="button" onClick={() => setContent(prompt)}>
-                  {prompt}
-                </button>
-              ))}
-            </div>
-
             <div className="privacy-segment" aria-label="Post visibility">
               {visibilityOptions.map((option) => (
                 <button
@@ -296,52 +286,20 @@ export function FeedPage() {
               </label>
               <button className="primary-button post-submit" disabled={busy || !canPost}>
                 <Send size={18} />
-                <span>{busy ? 'Publishing' : 'Post'}</span>
+                <span>{busy ? 'Publishing' : 'Share to Feed'}</span>
               </button>
             </div>
           </form>
         </div>
 
-        <div className="mobile-story-strip" aria-label="Stories">
-          <article className="mobile-story-card create-story-card">
-            <Avatar name={user?.display_name ?? 'U'} src={user?.avatar_url} />
-            <span className="story-add-icon">
-              <ImagePlus size={18} />
-            </span>
-            <strong>Create story</strong>
-          </article>
-          {storyPosts.map((post) => {
-            const item = post.media?.[0]
-            if (!item) return null
-            return (
-              <article className="mobile-story-card" key={post.id}>
-                {item.media_type === 'video' ? (
-                  <video
-                    muted
-                    playsInline
-                    preload="metadata"
-                    src={cloudinaryDeliveryUrl(item.media_type, item.secure_url)}
-                  />
-                ) : (
-                  <img
-                    src={cloudinaryDeliveryUrl(item.media_type, item.secure_url)}
-                    alt=""
-                  />
-                )}
-                <Avatar
-                  name={post.author?.display_name ?? `User #${post.author_id}`}
-                  src={post.author?.avatar_url}
-                />
-                <strong>{post.author?.display_name ?? `User #${post.author_id}`}</strong>
-              </article>
-            )
-          })}
-        </div>
-
         <div className="post-list">
           {showInitialSkeleton ? <FeedSkeleton /> : null}
           {!loading && posts.length === 0 ? (
-            <EmptyState title="No posts yet" />
+            <EmptyState
+              actionLabel="Discover"
+              actionTo="/"
+              title="No Feed yet"
+            />
           ) : null}
           {posts.map((post) => (
             <PostCard
@@ -353,7 +311,35 @@ export function FeedPage() {
           ))}
         </div>
       </main>
+
+      <aside className="pulse-context-rail" aria-label="Feed context">
+        <section>
+          <span>Pending</span>
+          <h2>{planReadyPosts.length || 0}</h2>
+        </section>
+        <section>
+          <span>City</span>
+          <div className="pulse-mini-metrics">
+            <strong>{posts.length}</strong>
+            <small>Feed items</small>
+            <strong>{mediaPostCount}</strong>
+            <small>visual drops</small>
+          </div>
+        </section>
+        <section>
+          <span>Quick</span>
+          <a href="/friends">Invite</a>
+          <a href="/chat">Messages</a>
+        </section>
+      </aside>
     </section>
+  )
+}
+
+function isPlanReadyPost(post: Post) {
+  const text = [post.content, post.shared_post?.content].filter(Boolean).join(' ').toLowerCase()
+  return ['plan', 'tonight', 'weekend', 'join', 'vote', 'place', 'food', 'cafe', 'event'].some((keyword) =>
+    text.includes(keyword),
   )
 }
 

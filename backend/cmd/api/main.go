@@ -22,7 +22,10 @@ func main() {
 		Level: slog.LevelInfo,
 	}))
 
-	db, err := database.OpenPostgres(context.Background(), cfg.Postgres)
+	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelStartup()
+
+	db, err := database.OpenPostgres(startupCtx, cfg.Postgres)
 	if err != nil {
 		logger.Error("database connection failed", "error", err)
 		os.Exit(1)
@@ -38,7 +41,11 @@ func main() {
 	server := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           handler,
+		ReadTimeout:       15 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    1 << 20,
 	}
 
 	go func() {

@@ -1,31 +1,46 @@
 import {
+  ArrowLeft,
+  ArrowRight,
   Bell,
   Bookmark,
   CalendarCheck,
   Check,
   ChevronDown,
   Clapperboard,
-  Clock,
+  Coffee,
+  Compass,
+  Dumbbell,
+  Flame,
   Heart,
-  IndianRupee,
   LogOut,
   MapPin,
   MessageCircle,
   MoreHorizontal,
+  Mountain,
   Newspaper,
   Search,
   Share2,
+  ShoppingBag,
   Sparkles,
+  Star,
   Tags,
+  Ticket,
+  Utensils,
   User as UserIcon,
   Users,
   X,
 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
-import type { FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { FormEvent, MouseEvent } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { api } from '../lib/api'
+import {
+  discoveryDemoSections,
+  type DiscoverySectionData,
+  type DiscoveryShowcaseItem,
+} from '../lib/discoveryDemoData'
+import { preloadChatData } from '../lib/chatDataCache'
 import type {
   Conversation,
   DiscoverySearchResult,
@@ -38,32 +53,97 @@ const navItems = [
   { to: '/', label: 'Plan', icon: Sparkles },
   { to: '/feed', label: 'Feed', icon: Newspaper },
   { to: '/reels', label: 'Reels', icon: Clapperboard },
-  { to: '/profile', label: 'Profile', icon: UserIcon },
   { to: '/friends', label: 'Friends', icon: Users },
 ]
 
-const discoveryChips = [
-  'Food',
-  'Street food',
-  'Cafe',
-  'Fun',
-  'Date',
-  'Friends',
-  'Family',
-  'Open now',
-  'Under 1000',
-  'Events',
-  'Peaceful',
-  'Nightlife',
-  'Adventure',
-  'Sports',
-  'Shopping',
-  'Wellness',
+const mobileNavItems = [
+  ...navItems,
+  { to: '/profile', label: 'Profile', icon: UserIcon },
 ]
+
+const discoveryServices = [
+  {
+    label: 'Dining Plans',
+    icon: Utensils,
+    query: 'restaurant cafe dinner nearby',
+    chips: ['Restaurant or cafe', 'dinner'],
+  },
+  {
+    label: 'Street Bites',
+    icon: Flame,
+    query: 'street food momos chaat nearby',
+    chips: ['Street food', 'quick-bite'],
+  },
+  {
+    label: 'Events',
+    icon: Ticket,
+    query: 'events concerts workshops theatre nearby',
+    chips: ['Culture and events'],
+  },
+  {
+    label: 'Fun Zones',
+    icon: Clapperboard,
+    query: 'bowling arcade gaming karaoke escape room',
+    chips: ['Fun and entertainment'],
+  },
+  {
+    label: 'Adventure',
+    icon: Mountain,
+    query: 'adventure go kart paintball trampoline nearby',
+    chips: ['Adventure'],
+  },
+  {
+    label: 'Nightlife',
+    icon: Sparkles,
+    query: 'nightlife pub bar dj late night',
+    chips: ['Nightlife', 'late-night'],
+  },
+  {
+    label: 'Sports',
+    icon: Dumbbell,
+    query: 'sports turf badminton football swimming',
+    chips: ['Sports and fitness'],
+  },
+  {
+    label: 'Wellness',
+    icon: Heart,
+    query: 'spa salon wellness self care nearby',
+    chips: ['Wellness and self care'],
+  },
+  {
+    label: 'Shopping',
+    icon: ShoppingBag,
+    query: 'shopping market mall flea books nearby',
+    chips: ['Shopping and markets'],
+  },
+  {
+    label: 'Day Trips',
+    icon: Compass,
+    query: 'travel trip tour local guide nearby',
+    chips: ['Travel or transport'],
+  },
+  {
+    label: 'Heritage',
+    icon: CalendarCheck,
+    query: 'heritage monument temple museum photo spot',
+    chips: ['Attractions and heritage'],
+  },
+  {
+    label: 'Learn',
+    icon: Coffee,
+    query: 'art dance music cooking pottery class',
+    chips: ['Learning and hobbies'],
+  },
+]
+
+const discoveryRailDotIndexes = [0, 1, 2]
 
 const discoveryRecentSearchesKey = 'zumers.discoveryRecentSearches'
 const discoverySavedBusinessesKey = 'zumers.discoverySavedBusinesses'
+const discoveryLocationCacheKey = 'zumers.discoveryLocation'
 const pendingBusinessShareKey = 'zumers.pendingBusinessShare'
+const pendingLandingSearchKey = 'zumers.pendingLandingSearch'
+const discoveryLocationCacheMaxAgeMs = 6 * 60 * 60 * 1000
 const discoveryFallbackSearches = [
   'street food under 500',
   'bowling for 4 friends',
@@ -71,27 +151,208 @@ const discoveryFallbackSearches = [
   'events today nearby',
 ]
 
+const popularLocationOptions = [
+  { name: 'Delhi NCR', detail: 'New Delhi, Gurugram, Noida' },
+  { name: 'Mumbai', detail: 'Bandra, Andheri, Powai' },
+  { name: 'Kolkata', detail: 'Park Street, Salt Lake' },
+  { name: 'Bengaluru', detail: 'Indiranagar, Koramangala' },
+  { name: 'Hyderabad', detail: 'Banjara Hills, HITEC City' },
+  { name: 'Chandigarh', detail: 'Sector 17, Elante' },
+]
+
+const allLocationOptions = [
+  'Abohar',
+  'Abu Dhabi',
+  'Abu Road',
+  'Achampet',
+  'Acharapakkam',
+  'Addanki',
+  'Adilabad',
+  'Ahmedabad',
+  'Bengaluru',
+  'Chandigarh',
+  'Chennai',
+  'Delhi NCR',
+  'Gurugram',
+  'Hyderabad',
+  'Jaipur',
+  'Kolkata',
+  'Lucknow',
+  'Mumbai',
+  'New Delhi',
+  'Noida',
+  'Pune',
+]
+
 export type DiscoverySearchPreset = {
   autoRun?: boolean
   chips?: string[]
   key: number
+  latitude?: number
+  longitude?: number
   query: string
+  radiusKm?: number
+}
+
+type DiscoverySearchOverrides = {
+  latitude?: number
+  longitude?: number
+  radiusKm?: number
+  useNearby?: boolean
+}
+
+type DiscoveryCachedLocation = {
+  accuracy?: number
+  label?: string
+  latitude: number
+  longitude: number
+  primary?: string
+  secondary?: string
+  savedAt: number
+}
+
+function containsCoordinatePair(value: string) {
+  return /-?\d+\.\d+,\s*-?\d+\.\d+/.test(value)
+}
+
+function cleanDisplayLocation(value?: string | null) {
+  const trimmed = value?.trim()
+  if (!trimmed || containsCoordinatePair(trimmed)) return ''
+  return trimmed
+}
+
+function isValidDiscoveryLocation(value: unknown): value is DiscoveryCachedLocation {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<DiscoveryCachedLocation>
+  if (
+    (candidate.label && containsCoordinatePair(candidate.label)) ||
+    (candidate.secondary && containsCoordinatePair(candidate.secondary))
+  ) {
+    return false
+  }
+  return (
+    typeof candidate.latitude === 'number' &&
+    candidate.latitude >= -90 &&
+    candidate.latitude <= 90 &&
+    typeof candidate.longitude === 'number' &&
+    candidate.longitude >= -180 &&
+    candidate.longitude <= 180 &&
+    typeof candidate.savedAt === 'number' &&
+    Date.now() - candidate.savedAt <= discoveryLocationCacheMaxAgeMs
+  )
+}
+
+function readDiscoveryCachedLocation() {
+  try {
+    const raw = localStorage.getItem(discoveryLocationCacheKey)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as unknown
+    if (!isValidDiscoveryLocation(parsed)) {
+      localStorage.removeItem(discoveryLocationCacheKey)
+      return null
+    }
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function writeDiscoveryCachedLocation(cachedLocation: DiscoveryCachedLocation) {
+  try {
+    localStorage.setItem(discoveryLocationCacheKey, JSON.stringify(cachedLocation))
+  } catch {
+    // Search still works with in-memory coordinates when storage is unavailable.
+  }
+}
+
+function saveDiscoveryCachedLocation(position: GeolocationPosition): DiscoveryCachedLocation {
+  const cachedLocation: DiscoveryCachedLocation = {
+    accuracy: position.coords.accuracy,
+    latitude: position.coords.latitude,
+    longitude: position.coords.longitude,
+    savedAt: Date.now(),
+  }
+  writeDiscoveryCachedLocation(cachedLocation)
+  return cachedLocation
+}
+
+async function hydrateDiscoveryLocationLabel(cachedLocation: DiscoveryCachedLocation) {
+  if (cachedLocation.label) return cachedLocation
+
+  try {
+    const response = await api.reverseLocation({
+      latitude: cachedLocation.latitude,
+      longitude: cachedLocation.longitude,
+    })
+    const nextLocation = {
+      ...cachedLocation,
+      label: response.location,
+      primary: response.primary,
+      secondary: response.secondary,
+      savedAt: Date.now(),
+    }
+    writeDiscoveryCachedLocation(nextLocation)
+    return nextLocation
+  } catch {
+    const nextLocation = {
+      ...cachedLocation,
+      label: 'Current location',
+      primary: 'Current location',
+      secondary: '',
+      savedAt: Date.now(),
+    }
+    writeDiscoveryCachedLocation(nextLocation)
+    return nextLocation
+  }
+}
+
+async function getDiscoveryLocation(): Promise<DiscoveryCachedLocation> {
+  const cachedLocation = readDiscoveryCachedLocation()
+  if (cachedLocation) return hydrateDiscoveryLocationLabel(cachedLocation)
+
+  if (!navigator.geolocation) {
+    return Promise.reject(new Error('Location is not available'))
+  }
+
+  return new Promise((resolve, reject) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        void hydrateDiscoveryLocationLabel(saveDiscoveryCachedLocation(position)).then(resolve)
+      },
+      () => reject(new Error('Could not read location')),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: discoveryLocationCacheMaxAgeMs },
+    )
+  })
 }
 
 export function AppLayout() {
-  const { user, logout } = useAuth()
+  const { user, logout, setUser } = useAuth()
   const location = useLocation()
   const navigate = useNavigate()
+  const [headerLocationBusy, setHeaderLocationBusy] = useState(false)
+  const [headerLocationError, setHeaderLocationError] = useState<string | null>(null)
+  const isPlan = location.pathname === '/'
   const isReels = location.pathname.startsWith('/reels')
   const isFriends = location.pathname.startsWith('/friends')
   const isChat = location.pathname.startsWith('/chat')
   const showRightRail = location.pathname === '/feed'
+  const [isMobileHeader, setIsMobileHeader] = useState(() =>
+    typeof window !== 'undefined'
+      ? window.matchMedia('(max-width: 760px)').matches
+      : false,
+  )
   const [friends, setFriends] = useState<User[]>([])
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [contactQuery, setContactQuery] = useState('')
   const [chatDockLoading, setChatDockLoading] = useState(false)
   const [chatDockError, setChatDockError] = useState<string | null>(null)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false)
+  const [locationQuery, setLocationQuery] = useState('')
+  const [currentLocationCandidateLabel, setCurrentLocationCandidateLabel] = useState(() => {
+    const cachedLocation = readDiscoveryCachedLocation()
+    return cachedLocation?.label ?? ''
+  })
   const [notificationOpen, setNotificationOpen] = useState(false)
   const [notificationFilter, setNotificationFilter] = useState<'all' | 'unread'>('all')
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
@@ -116,8 +377,25 @@ export function AppLayout() {
   }, [])
 
   useEffect(() => {
+    if (!user?.id) return
+    const timer = window.setTimeout(() => {
+      preloadChatData(user.id).catch(() => undefined)
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [user?.id])
+
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 760px)')
+    const update = () => setIsMobileHeader(query.matches)
+    update()
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
+
+  useEffect(() => {
     setNotificationOpen(false)
     setProfileMenuOpen(false)
+    setLocationPickerOpen(false)
   }, [location.pathname])
 
   useEffect(() => {
@@ -206,6 +484,7 @@ export function AppLayout() {
   async function openNotificationPanel() {
     setNotificationOpen((current) => !current)
     setProfileMenuOpen(false)
+    setLocationPickerOpen(false)
     setNotificationLoading(true)
     setNotificationError(null)
     try {
@@ -263,10 +542,19 @@ export function AppLayout() {
     notificationFilter === 'unread'
       ? activityNotifications.filter((item) => !item.read_at)
       : activityNotifications
+  const currentLocationLabel = cleanDisplayLocation(user?.location) || 'Use current location'
+  const currentLocationParts = splitLocationLabel(currentLocationLabel)
+  const displayedLocationLabel = headerLocationBusy ? 'Locating' : currentLocationParts.primary
+  const filteredLocationOptions = useMemo(() => {
+    const term = locationQuery.trim().toLowerCase()
+    if (!term) return allLocationOptions
+    return allLocationOptions.filter((item) => item.toLowerCase().includes(term))
+  }, [locationQuery])
 
   const frameClass = [
     'app-frame',
     showRightRail ? 'with-right-rail' : 'content-wide',
+    isPlan ? 'plan-shell' : '',
     isReels ? 'reels-shell' : '',
     isFriends ? 'friends-shell' : '',
     isChat ? 'chat-page-shell' : '',
@@ -274,13 +562,209 @@ export function AppLayout() {
     .filter(Boolean)
     .join(' ')
 
+  function useHeaderLocation() {
+    setHeaderLocationError(null)
+    setHeaderLocationBusy(true)
+    getDiscoveryLocation()
+      .then((cachedLocation) => {
+        const nextLocationLabel =
+          cachedLocation.label ?? 'Current location'
+        const preset: DiscoverySearchPreset = {
+          autoRun: true,
+          chips: ['Nearby'],
+          key: Date.now(),
+          latitude: cachedLocation.latitude,
+          longitude: cachedLocation.longitude,
+          query: '',
+          radiusKm: 5,
+        }
+        setCurrentLocationCandidateLabel(nextLocationLabel)
+        sessionStorage.setItem(pendingLandingSearchKey, JSON.stringify(preset))
+        if (user) {
+          setUser({ ...user, location: nextLocationLabel })
+          void api.updateProfile({ location: nextLocationLabel }).catch(() => undefined)
+        }
+        setHeaderLocationBusy(false)
+        setLocationPickerOpen(false)
+        setLocationQuery('')
+        navigate('/', { state: { discoveryPreset: preset } })
+      })
+      .catch((err) => {
+        setHeaderLocationError(err instanceof Error ? err.message : 'Could not read location')
+        setHeaderLocationBusy(false)
+      })
+  }
+
+  function selectHeaderLocation(nextLocation: string) {
+    setHeaderLocationError(null)
+    setLocationPickerOpen(false)
+    setLocationQuery('')
+    if (user) {
+      setUser({ ...user, location: nextLocation })
+      void api.updateProfile({ location: nextLocation }).catch(() => undefined)
+    }
+    const preset: DiscoverySearchPreset = {
+      autoRun: true,
+      chips: [],
+      key: Date.now(),
+      query: nextLocation,
+    }
+    sessionStorage.setItem(pendingLandingSearchKey, JSON.stringify(preset))
+    navigate('/', { state: { discoveryPreset: preset } })
+  }
+
+  function warmChatData() {
+    if (!user?.id) return
+    preloadChatData(user.id).catch(() => undefined)
+  }
+
+  const notificationPopover = notificationOpen ? (
+    <div className="notification-popover" role="dialog" aria-label="Activity">
+      <div className="notification-popover-header">
+        <h2>Activity</h2>
+        <button
+          aria-label="Close activity"
+          className="icon-button quiet"
+          type="button"
+          onClick={() => setNotificationOpen(false)}
+        >
+          <X size={19} />
+        </button>
+      </div>
+      <div className="notification-tabs" role="tablist" aria-label="Activity filters">
+        <button
+          className={notificationFilter === 'all' ? 'active' : ''}
+          type="button"
+          onClick={() => setNotificationFilter('all')}
+        >
+          All
+        </button>
+        <button
+          className={notificationFilter === 'unread' ? 'active' : ''}
+          type="button"
+          onClick={() => setNotificationFilter('unread')}
+        >
+          Unread
+        </button>
+      </div>
+      {notificationError ? (
+        <div className="inline-error">{notificationError}</div>
+      ) : null}
+      <div className="notification-popover-body">
+        {notificationLoading ? (
+          <div className="chat-dock-state">Loading notifications</div>
+        ) : null}
+        {!notificationLoading &&
+        friendRequests.length === 0 &&
+        visibleNotifications.length === 0 ? (
+          <div className="notification-empty">No activity yet</div>
+        ) : null}
+        {!notificationLoading && friendRequests.length > 0 ? (
+          <section className="notification-group">
+            <div className="notification-group-heading">
+              <h3>New</h3>
+              <NavLink to="/friends">Friends</NavLink>
+            </div>
+            {friendRequests.map((request) => (
+              <article className="notification-request-card" key={request.id}>
+                <Avatar
+                  name={request.sender?.display_name ?? 'Friend'}
+                  src={request.sender?.avatar_url}
+                />
+                <div>
+                  <p>
+                    <strong>{request.sender?.display_name ?? 'Someone'}</strong>
+                    {' sent an invite.'}
+                  </p>
+                  <span>{formatContactTime(request.created_at)}</span>
+                  <div className="notification-request-actions">
+                    <button
+                      className="primary-button"
+                      disabled={notificationBusy === `accept-${request.id}`}
+                      type="button"
+                      onClick={() => answerFriendRequest(request.id, 'accept')}
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      className="ghost-button"
+                      disabled={notificationBusy === `reject-${request.id}`}
+                      type="button"
+                      onClick={() => answerFriendRequest(request.id, 'reject')}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+                <span className="notification-dot" />
+              </article>
+            ))}
+          </section>
+        ) : null}
+        {!notificationLoading && visibleNotifications.length > 0 ? (
+          <section className="notification-group">
+            <div className="notification-group-heading">
+              <h3>{friendRequests.length > 0 ? 'Earlier' : 'New'}</h3>
+              <NavLink to="/notifications">Activity</NavLink>
+            </div>
+            {visibleNotifications.map((item) => (
+              <button
+                className={
+                  item.read_at
+                    ? 'notification-popover-item read'
+                    : 'notification-popover-item'
+                }
+                disabled={notificationBusy === `notification-${item.id}`}
+                key={item.id}
+                type="button"
+                onClick={() => markNotificationRead(item)}
+              >
+                <span className="notification-type-icon">
+                  {item.read_at ? <Check size={18} /> : <Bell size={18} />}
+                </span>
+                <span>
+                  <strong>{labelForNotification(item.notification_type)}</strong>
+                  <small>{formatContactTime(item.created_at)}</small>
+                </span>
+                {!item.read_at ? <span className="notification-dot" /> : null}
+              </button>
+            ))}
+          </section>
+        ) : null}
+      </div>
+    </div>
+  ) : null
+
   return (
     <div className={frameClass}>
       <header className="topbar">
-        <div className="topbar-left">
+        <NavLink aria-label="Zumers home" className="topbar-left brand-home" to="/">
           <div className="brand-mark">Z</div>
           <strong className="topbar-product-name">Zumers</strong>
-        </div>
+        </NavLink>
+
+        <button
+          className="topbar-location"
+          aria-controls="location-picker"
+          aria-expanded={locationPickerOpen}
+          aria-label={`Change location. Current: ${currentLocationLabel}`}
+          disabled={headerLocationBusy}
+          title={headerLocationError ?? 'Change location'}
+          type="button"
+          onClick={() => {
+            setHeaderLocationError(null)
+            setNotificationOpen(false)
+            setProfileMenuOpen(false)
+            setLocationPickerOpen(true)
+          }}
+        >
+          <MapPin size={17} />
+          <span className="topbar-location-text">
+            <strong>{displayedLocationLabel}</strong>
+            {currentLocationParts.secondary && !headerLocationBusy ? <small>{currentLocationParts.secondary}</small> : null}
+          </span>
+          <ChevronDown className="topbar-location-chevron" size={15} />
+        </button>
 
         <nav className="topbar-tabs" aria-label="Primary sections">
           {navItems.map((item) => (
@@ -301,19 +785,24 @@ export function AppLayout() {
 
         <div className="topbar-actions">
           <NavLink
-            aria-label="Chat"
+            aria-label="Messages"
             className={({ isActive }) =>
               isActive ? 'topbar-icon active' : 'topbar-icon'
             }
+            title="Messages"
             to="/chat"
+            onFocus={warmChatData}
+            onPointerEnter={warmChatData}
+            onTouchStart={warmChatData}
           >
             <MessageCircle size={21} />
           </NavLink>
           <div className="notification-anchor">
             <button
               aria-expanded={notificationOpen}
-              aria-label="Notifications"
+              aria-label="Activity"
               className={notificationOpen ? 'topbar-icon active' : 'topbar-icon'}
+              title="Activity"
               type="button"
               onClick={openNotificationPanel}
             >
@@ -324,122 +813,7 @@ export function AppLayout() {
                 </span>
               ) : null}
             </button>
-            {notificationOpen ? (
-              <div className="notification-popover" role="dialog" aria-label="Notifications">
-                <div className="notification-popover-header">
-                  <h2>Notifications</h2>
-                  <button
-                    aria-label="Close notifications"
-                    className="icon-button quiet"
-                    type="button"
-                    onClick={() => setNotificationOpen(false)}
-                  >
-                    <X size={19} />
-                  </button>
-                </div>
-                <div className="notification-tabs" role="tablist" aria-label="Notification filters">
-                  <button
-                    className={notificationFilter === 'all' ? 'active' : ''}
-                    type="button"
-                    onClick={() => setNotificationFilter('all')}
-                  >
-                    All
-                  </button>
-                  <button
-                    className={notificationFilter === 'unread' ? 'active' : ''}
-                    type="button"
-                    onClick={() => setNotificationFilter('unread')}
-                  >
-                    Unread
-                  </button>
-                </div>
-                {notificationError ? (
-                  <div className="inline-error">{notificationError}</div>
-                ) : null}
-                <div className="notification-popover-body">
-                  {notificationLoading ? (
-                    <div className="chat-dock-state">Loading notifications</div>
-                  ) : null}
-                  {!notificationLoading &&
-                  friendRequests.length === 0 &&
-                  visibleNotifications.length === 0 ? (
-                    <div className="notification-empty">No notifications</div>
-                  ) : null}
-                  {!notificationLoading && friendRequests.length > 0 ? (
-                    <section className="notification-group">
-                      <div className="notification-group-heading">
-                        <h3>New</h3>
-                        <NavLink to="/friends">See all</NavLink>
-                      </div>
-                      {friendRequests.map((request) => (
-                        <article className="notification-request-card" key={request.id}>
-                          <Avatar
-                            name={request.sender?.display_name ?? 'Friend'}
-                            src={request.sender?.avatar_url}
-                          />
-                          <div>
-                            <p>
-                              <strong>{request.sender?.display_name ?? 'Someone'}</strong>
-                              {' sent you a friend request.'}
-                            </p>
-                            <span>{formatContactTime(request.created_at)}</span>
-                            <div className="notification-request-actions">
-                              <button
-                                className="primary-button"
-                                disabled={notificationBusy === `accept-${request.id}`}
-                                type="button"
-                                onClick={() => answerFriendRequest(request.id, 'accept')}
-                              >
-                                Confirm
-                              </button>
-                              <button
-                                className="ghost-button"
-                                disabled={notificationBusy === `reject-${request.id}`}
-                                type="button"
-                                onClick={() => answerFriendRequest(request.id, 'reject')}
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </div>
-                          <span className="notification-dot" />
-                        </article>
-                      ))}
-                    </section>
-                  ) : null}
-                  {!notificationLoading && visibleNotifications.length > 0 ? (
-                    <section className="notification-group">
-                      <div className="notification-group-heading">
-                        <h3>{friendRequests.length > 0 ? 'Earlier' : 'New'}</h3>
-                        <NavLink to="/notifications">See all</NavLink>
-                      </div>
-                      {visibleNotifications.map((item) => (
-                        <button
-                          className={
-                            item.read_at
-                              ? 'notification-popover-item read'
-                              : 'notification-popover-item'
-                          }
-                          disabled={notificationBusy === `notification-${item.id}`}
-                          key={item.id}
-                          type="button"
-                          onClick={() => markNotificationRead(item)}
-                        >
-                          <span className="notification-type-icon">
-                            {item.read_at ? <Check size={18} /> : <Bell size={18} />}
-                          </span>
-                          <span>
-                            <strong>{labelForNotification(item.notification_type)}</strong>
-                            <small>{formatContactTime(item.created_at)}</small>
-                          </span>
-                          {!item.read_at ? <span className="notification-dot" /> : null}
-                        </button>
-                      ))}
-                    </section>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
+            {!isMobileHeader ? notificationPopover : null}
           </div>
           <div className="current-user">
             <button
@@ -450,6 +824,7 @@ export function AppLayout() {
               onClick={() => {
                 setProfileMenuOpen((value) => !value)
                 setNotificationOpen(false)
+                setLocationPickerOpen(false)
               }}
             >
               <Avatar name={user?.display_name ?? 'U'} src={user?.avatar_url} />
@@ -476,67 +851,116 @@ export function AppLayout() {
         </div>
       </header>
 
-      <aside className="sidebar">
-        <div className="brand">
-          <Avatar name={user?.display_name ?? 'U'} src={user?.avatar_url} />
-          <div>
-            <strong>{user?.display_name ?? 'Zumers'}</strong>
-            <span>@{user?.username}</span>
-          </div>
-        </div>
+      {isMobileHeader ? notificationPopover : null}
 
-        <nav className="nav-list" aria-label="Primary navigation">
-          {navItems.map((item) => (
-            <NavLink
-              className={({ isActive }) =>
-                isActive ? 'nav-item active' : 'nav-item'
-              }
-              end={item.to === '/'}
-              key={item.to}
-              to={item.to}
+      {locationPickerOpen ? (
+        <div
+          className="location-picker-overlay"
+          id="location-picker"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setLocationPickerOpen(false)
+          }}
+        >
+          <section className="location-picker-panel" role="dialog" aria-modal="true" aria-label="Choose location">
+            <div className="location-picker-header">
+              <button
+                aria-label="Close location picker"
+                className="icon-button quiet"
+                type="button"
+                onClick={() => setLocationPickerOpen(false)}
+              >
+                <ChevronDown size={22} />
+              </button>
+              <h2>Location</h2>
+            </div>
+
+            <label className="location-picker-search">
+              <Search size={21} />
+              <input
+                autoFocus
+                placeholder="Search city, area or locality"
+                value={locationQuery}
+                onChange={(event) => setLocationQuery(event.target.value)}
+              />
+            </label>
+
+            <button
+              className="location-current-card"
+              disabled={headerLocationBusy}
+              type="button"
+              onClick={useHeaderLocation}
             >
-              <item.icon size={20} />
-              <span>{item.label}</span>
-            </NavLink>
-          ))}
-        </nav>
+              <span className="location-current-dot" />
+              <span>
+                <strong>{headerLocationBusy ? 'Locating' : 'Use current location'}</strong>
+                <small>{currentLocationCandidateLabel || 'Tap to personalize nearby plans'}</small>
+              </span>
+              <ArrowRight size={19} />
+            </button>
 
-        <button className="ghost-button sidebar-action" onClick={logout}>
-          <LogOut size={18} />
-          <span>Logout</span>
-        </button>
-      </aside>
+            {headerLocationError ? <div className="location-picker-error">{headerLocationError}</div> : null}
+
+            <section className="location-picker-section">
+              <h3>Popular cities</h3>
+              <div className="location-popular-grid">
+                {popularLocationOptions.map((item) => (
+                  <button key={item.name} type="button" onClick={() => selectHeaderLocation(item.name)}>
+                    <MapPin size={30} />
+                    <strong>{item.name}</strong>
+                    <small>{item.detail}</small>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="location-picker-section">
+              <h3>All cities</h3>
+              <div className="location-city-list">
+                {filteredLocationOptions.map((item) => (
+                  <button key={item} type="button" onClick={() => selectHeaderLocation(item)}>
+                    {item}
+                  </button>
+                ))}
+                {filteredLocationOptions.length === 0 ? (
+                  <span className="location-empty">No matching city</span>
+                ) : null}
+              </div>
+            </section>
+          </section>
+        </div>
+      ) : null}
 
       <main className="main-area">
         <Outlet />
       </main>
 
       {showRightRail ? (
-        <aside className="right-rail" aria-label="Social activity">
+        <aside className="right-rail" aria-label="Feed context">
           <section className="right-rail-section desktop-only">
             <div className="right-rail-heading">
-              <h2>Friend requests</h2>
-              <NavLink to="/friends">See all</NavLink>
+              <h2>Attention</h2>
+              <NavLink to="/notifications">Activity</NavLink>
             </div>
             <div className="request-preview">
               <Avatar name="F" />
               <div>
-                <strong>People you may know</strong>
-                <span>Review requests and suggestions</span>
+                <strong>Friends</strong>
+                <span>Invites and suggestions</span>
               </div>
             </div>
           </section>
 
           <section className="right-rail-section desktop-only">
             <div className="right-rail-heading">
-              <h2>Birthdays</h2>
+              <h2>Tonight</h2>
             </div>
-            <p className="rail-muted">No birthdays today.</p>
+            <p className="rail-muted">Food, events and activities nearby.</p>
           </section>
 
           <section className="right-rail-section contacts-rail">
             <div className="right-rail-heading">
-              <h2>Contacts</h2>
+              <h2>Friends</h2>
               <div className="rail-actions">
                 <button
                   aria-label="Search contacts"
@@ -558,7 +982,7 @@ export function AppLayout() {
               <Search size={17} />
               <input
                 aria-label="Search contacts"
-                placeholder="Search contacts"
+                placeholder="Search people"
                 value={contactQuery}
                 onChange={(event) => setContactQuery(event.target.value)}
               />
@@ -570,27 +994,27 @@ export function AppLayout() {
               <div className="chat-dock-state">Loading contacts</div>
             ) : null}
             {!chatDockLoading && contacts.length === 0 ? (
-              <div className="chat-dock-state">No contacts to show</div>
+              <div className="chat-dock-state">No people to show</div>
             ) : null}
             {!chatDockLoading && contacts.length > 0 ? (
               <div className="chat-dock-list">
                 <ContactSection
                   contacts={recentContacts}
-                  emptyLabel="No recent chats"
+                  emptyLabel="No recent"
                   onOpen={openFriendChat}
-                  title="Recent contacts"
+                  title="Recent"
                 />
                 <ContactSection
                   contacts={onlineContacts}
-                  emptyLabel="No other online friends"
+                  emptyLabel="No active people"
                   onOpen={openFriendChat}
-                  title="Online"
+                  title="Active now"
                 />
                 <ContactSection
                   contacts={offlineContacts}
-                  emptyLabel="No other offline friends"
+                  emptyLabel="No more people"
                   onOpen={openFriendChat}
-                  title="Offline"
+                  title="People"
                 />
               </div>
             ) : null}
@@ -598,6 +1022,22 @@ export function AppLayout() {
 
         </aside>
       ) : null}
+
+      <nav className="mobile-bottom-nav" aria-label="Mobile primary navigation">
+        {mobileNavItems.map((item) => (
+          <NavLink
+            className={({ isActive }) =>
+              isActive ? 'mobile-bottom-nav-item active' : 'mobile-bottom-nav-item'
+            }
+            end={item.to === '/'}
+            key={item.to}
+            to={item.to}
+          >
+            <item.icon size={20} />
+            <span>{item.label}</span>
+          </NavLink>
+        ))}
+      </nav>
     </div>
   )
 }
@@ -613,6 +1053,7 @@ export function DiscoverySearchPanel({
   preset?: DiscoverySearchPreset
   title?: string
 }) {
+  const { user } = useAuth()
   const [query, setQuery] = useState('')
   const [selectedChips, setSelectedChips] = useState<string[]>([])
   const [recentSearches, setRecentSearches] = useState<string[]>(() => loadDiscoveryRecentSearches())
@@ -621,28 +1062,72 @@ export function DiscoverySearchPanel({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null)
+  const [nearbyEnabled, setNearbyEnabled] = useState(false)
   const [locationBusy, setLocationBusy] = useState(false)
   const [locationError, setLocationError] = useState<string | null>(null)
-  const [radiusKm, setRadiusKm] = useState(5)
+  const radiusKm = 5
+  const chipRailRef = useRef<HTMLDivElement | null>(null)
+  const autoRunPresetKeyRef = useRef<number | null>(null)
+  const [chipRailPage, setChipRailPage] = useState(0)
+  const [activeService, setActiveService] = useState<string | null>(null)
+  const firstName = firstUserName(user)
+  const showcaseSections = useMemo(() => buildDiscoverySections(results), [results])
+  const heroPreviewItems = showcaseSections[0]?.items.slice(0, 3) ?? []
+  const showBrowseSections = !loading && !searched
 
   useEffect(() => {
     if (!preset) return
     const presetChips = preset.chips ?? []
     setQuery(preset.query)
     setSelectedChips(presetChips)
+    setActiveService(null)
+    const hasPresetLocation = typeof preset.latitude === 'number' && typeof preset.longitude === 'number'
+    setLocation(
+      hasPresetLocation
+        ? { latitude: preset.latitude as number, longitude: preset.longitude as number }
+        : null,
+    )
+    setNearbyEnabled(hasPresetLocation)
     setResults([])
     setSearched(false)
     setError(null)
-    if (preset.autoRun) {
-      void runSearch(preset.query, presetChips)
+    if (preset.autoRun && autoRunPresetKeyRef.current !== preset.key) {
+      autoRunPresetKeyRef.current = preset.key
+      void runSearch(preset.query, presetChips, {
+        latitude: preset.latitude,
+        longitude: preset.longitude,
+        radiusKm: preset.radiusKm,
+      })
     }
   }, [preset])
 
-  async function runSearch(searchQuery: string, chips: string[]) {
+  useEffect(() => {
+    syncChipRailPage()
+    window.addEventListener('resize', syncChipRailPage)
+    return () => {
+      window.removeEventListener('resize', syncChipRailPage)
+    }
+  }, [])
+
+  async function runSearch(
+    searchQuery: string,
+    chips: string[],
+    overrides: DiscoverySearchOverrides = {},
+  ) {
     const trimmedQuery = searchQuery.trim()
     if (trimmedQuery) {
       setRecentSearches(saveDiscoveryRecentSearch(trimmedQuery))
     }
+    const shouldUseNearby = overrides.useNearby ?? (nearbyEnabled || overrides.latitude !== undefined)
+    const cachedLocation = shouldUseNearby && !location && overrides.latitude === undefined
+      ? readDiscoveryCachedLocation()
+      : null
+    if (cachedLocation) {
+      setLocation({ latitude: cachedLocation.latitude, longitude: cachedLocation.longitude })
+    }
+    const latitude = overrides.latitude ?? location?.latitude ?? cachedLocation?.latitude
+    const longitude = overrides.longitude ?? location?.longitude ?? cachedLocation?.longitude
+    const hasLocation = shouldUseNearby && typeof latitude === 'number' && typeof longitude === 'number'
     setLoading(true)
     setError(null)
     setSearched(true)
@@ -650,9 +1135,9 @@ export function DiscoverySearchPanel({
       const response = await api.discoverySearch({
         query: searchQuery,
         chips,
-        latitude: location?.latitude,
-        longitude: location?.longitude,
-        radiusKm: location ? radiusKm : undefined,
+        latitude: hasLocation ? latitude : undefined,
+        longitude: hasLocation ? longitude : undefined,
+        radiusKm: hasLocation ? (overrides.radiusKm ?? radiusKm) : undefined,
         limit: 20,
       })
       setResults(response.results)
@@ -665,10 +1150,14 @@ export function DiscoverySearchPanel({
 
   async function search(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault()
+    setActiveService(null)
     await runSearch(query, selectedChips)
   }
 
   function toggleChip(chip: string) {
+    if (chip === 'Nearby' && selectedChips.includes(chip)) {
+      setNearbyEnabled(false)
+    }
     setSelectedChips((current) =>
       current.includes(chip)
         ? current.filter((item) => item !== chip)
@@ -676,162 +1165,590 @@ export function DiscoverySearchPanel({
     )
   }
 
-  function useCurrentLocation() {
-    setLocationError(null)
-    if (!navigator.geolocation) {
-      setLocationError('Location is not available in this browser')
+  async function toggleNearbySearch() {
+    if (nearbyEnabled) {
+      const nextChips = selectedChips.filter((chip) => chip !== 'Nearby')
+      setNearbyEnabled(false)
+      setSelectedChips(nextChips)
+      await runSearch(query, nextChips, { useNearby: false })
       return
     }
+
+    setLocationError(null)
     setLocationBusy(true)
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLocation({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        })
-        setLocationBusy(false)
-      },
-      () => {
-        setLocationError('Could not read current location')
-        setLocationBusy(false)
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
+    try {
+      const cachedLocation = await getDiscoveryLocation()
+      const nextLocation = {
+        latitude: cachedLocation.latitude,
+        longitude: cachedLocation.longitude,
+      }
+      const nextChips = selectedChips.includes('Nearby')
+        ? selectedChips
+        : [...selectedChips, 'Nearby']
+      setLocation(nextLocation)
+      setNearbyEnabled(true)
+      setSelectedChips(nextChips)
+      await runSearch(query, nextChips, {
+        latitude: nextLocation.latitude,
+        longitude: nextLocation.longitude,
+        radiusKm,
+        useNearby: true,
+      })
+    } catch (err) {
+      setLocationError(err instanceof Error ? err.message : 'Could not read location')
+    } finally {
+      setLocationBusy(false)
+    }
+  }
+
+  function exploreService(service: (typeof discoveryServices)[number]) {
+    setActiveService(service.label)
+    void runSearch(service.query, service.chips)
+  }
+
+  function exploreItem(item: DiscoveryShowcaseItem) {
+    const nextQuery = `${item.title} ${item.locality}`.trim()
+    setQuery(nextQuery)
+    void runSearch(nextQuery, [item.category])
+  }
+
+  function selectRecentSearch(item: string) {
+    setQuery(item)
+    void runSearch(item, selectedChips)
+  }
+
+  function removeRecentSearch(item: string) {
+    const next = recentSearches.filter(
+      (recent) => recent.toLowerCase() !== item.toLowerCase(),
+    )
+    localStorage.setItem(discoveryRecentSearchesKey, JSON.stringify(next))
+    setRecentSearches(next)
+  }
+
+  function clearRecentSearches() {
+    localStorage.removeItem(discoveryRecentSearchesKey)
+    setRecentSearches([])
+  }
+
+  function closeSearchResults() {
+    setResults([])
+    setSearched(false)
+    setLoading(false)
+    setError(null)
+    setActiveService(null)
+  }
+
+  function syncChipRailPage() {
+    const rail = chipRailRef.current
+    if (!rail) return
+
+    const maxScrollLeft = rail.scrollWidth - rail.clientWidth
+    const nextPage =
+      maxScrollLeft <= 0
+        ? 0
+        : Math.round((rail.scrollLeft / maxScrollLeft) * (discoveryRailDotIndexes.length - 1))
+    setChipRailPage((current) =>
+      current === nextPage ? current : Math.max(0, Math.min(discoveryRailDotIndexes.length - 1, nextPage)),
     )
   }
 
+  function scrollChipRailTo(pageIndex: number) {
+    const rail = chipRailRef.current
+    if (!rail) return
+
+    const maxScrollLeft = rail.scrollWidth - rail.clientWidth
+    rail.scrollTo({
+      behavior: 'smooth',
+      left: maxScrollLeft <= 0
+        ? 0
+        : (maxScrollLeft * pageIndex) / (discoveryRailDotIndexes.length - 1),
+    })
+    setChipRailPage(pageIndex)
+  }
+
   return (
-    <section className="discovery-modal">
-      <div className="discovery-header">
-        <div>
-          <span><Sparkles size={16} /> Zumers</span>
-          <h2>{title}</h2>
+    <section className="discovery-modal plan-discovery-page">
+      <div className="plan-hero">
+        <div className="plan-hero-copy">
+          <span className="plan-kicker">
+            <Sparkles size={16} />
+            Never Wonder What to Do Today.
+          </span>
+          <h1>{firstName ? `${firstName}, what's the plan today?` : "What's the plan today?"}</h1>
+          <p>Tell us the mood, people and budget. Zumers will find the right plan.</p>
         </div>
+
         {onClose ? (
-          <button className="icon-button quiet" type="button" aria-label="Close search" onClick={onClose}>
+          <button className="icon-button quiet plan-close-button" type="button" aria-label="Close search" onClick={onClose}>
             <X size={20} />
           </button>
         ) : null}
-      </div>
 
-      <form className="discovery-search-form" onSubmit={search}>
-        <label>
-          <Search size={19} />
-          <div className="discovery-search-composer">
-            {selectedChips.map((chip) => (
-              <button
-                aria-label={`Remove ${chip}`}
-                className="discovery-search-tag"
-                key={chip}
-                title={`Remove ${chip}`}
-                type="button"
-                onClick={() => toggleChip(chip)}
-              >
-                #{chip}
-              </button>
-            ))}
-            <input
-              autoFocus={autoFocus}
-              placeholder={
-                selectedChips.length
-                  ? 'add more detail'
-                  : 'momos near me, date tonight, 4 friends under 1000'
-              }
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
+        <form className="discovery-search-form" role="search" onSubmit={search}>
+          <label aria-label={title}>
+            <Search size={21} />
+            <div className="discovery-search-composer">
+              {selectedChips.map((chip) => (
+                <button
+                  aria-label={`Remove ${chip}`}
+                  className="discovery-search-tag"
+                  key={chip}
+                  title={`Remove ${chip}`}
+                  type="button"
+                  onClick={() => toggleChip(chip)}
+                >
+                  {chip}
+                </button>
+              ))}
+              <input
+                autoFocus={autoFocus}
+                placeholder="Dinner for 4 near me tonight under Rs 1,000"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </div>
+          </label>
+          <div className={nearbyEnabled ? 'discovery-nearby-row active' : 'discovery-nearby-row'}>
+            <button
+              type="button"
+              aria-pressed={nearbyEnabled}
+              disabled={locationBusy}
+              onClick={toggleNearbySearch}
+            >
+              <MapPin size={15} />
+              <span>{locationBusy ? 'Locating' : nearbyEnabled ? 'Nearby on' : 'Nearby off'}</span>
+            </button>
           </div>
           <button
-            aria-label={location ? 'Location enabled' : 'Use current location'}
-            className={
-              location ? 'discovery-inline-location active' : 'discovery-inline-location'
-            }
-            disabled={locationBusy}
-            title={location ? 'Location enabled' : locationBusy ? 'Locating' : 'Use location'}
-            type="button"
-            onClick={useCurrentLocation}
+            className="primary-button plan-search-button"
+            disabled={loading || (!query.trim() && selectedChips.length === 0)}
+            type="submit"
           >
-            <MapPin size={17} />
+            <span>{loading ? 'Finding plans' : 'Find a plan'}</span>
+            <ArrowRight size={18} />
           </button>
-        </label>
-        <button className="primary-button" disabled={loading} type="submit">
-          {loading ? 'Finding' : 'Go'}
-        </button>
-      </form>
+        </form>
+        {locationError ? <span className="discovery-location-error">{locationError}</span> : null}
 
-      <div className={location ? 'discovery-nearby-row active' : 'discovery-nearby-row'}>
-        <div>
-          <span>{location ? 'Search radius' : 'Tap the Location Pin to Search near you'}</span>
-          {location ? (
-            <label>
-              <input
-                max="25"
-                min="1"
-                step="1"
-                type="range"
-                value={radiusKm}
-                onChange={(event) => setRadiusKm(Number(event.target.value))}
-              />
-              <strong>{radiusKm} km</strong>
-            </label>
-          ) : null}
-        </div>
+        {heroPreviewItems.length > 0 ? (
+          <div className="plan-hero-preview" aria-label="Discovery preview">
+            {heroPreviewItems.map((item) => (
+              <button key={item.id} type="button" onClick={() => exploreItem(item)}>
+                <span>{item.category}</span>
+                <strong>{item.title}</strong>
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="discovery-toolbar">
-        <div className="discovery-chip-row" aria-label="Discovery filters">
-          {discoveryChips.map((chip) => (
+        <div className="plan-mobile-section-title">
+          <h2>Explore</h2>
+        </div>
+        <div
+          className="discovery-chip-row"
+          aria-label="Discovery filters"
+          ref={chipRailRef}
+          onScroll={syncChipRailPage}
+        >
+          {discoveryServices.map((service) => {
+            const Icon = service.icon
+            return (
+              <button
+                className={activeService === service.label ? 'active' : ''}
+                key={service.label}
+                type="button"
+                aria-pressed={activeService === service.label}
+                onClick={() => exploreService(service)}
+              >
+                <span className="discovery-chip-icon">
+                  <Icon size={17} />
+                </span>
+                <span>{service.label}</span>
+              </button>
+            )
+          })}
+        </div>
+        <div className="plan-rail-dots" aria-label="Explore category pages">
+          {discoveryRailDotIndexes.map((pageIndex) => (
             <button
-              className={selectedChips.includes(chip) ? 'active' : ''}
-              key={chip}
+              aria-label={`Show category page ${pageIndex + 1}`}
+              className={chipRailPage === pageIndex ? 'active' : ''}
+              key={pageIndex}
               type="button"
-              onClick={() => toggleChip(chip)}
-            >
-              {chip}
-            </button>
+              onClick={() => scrollChipRailTo(pageIndex)}
+            />
           ))}
         </div>
       </div>
 
-      {locationError ? <div className="inline-error">{locationError}</div> : null}
       {error ? <div className="inline-error">{error}</div> : null}
 
-      <div className="discovery-results">
-        {loading ? (
-          <div className="discovery-state">Finding plans</div>
-        ) : null}
-        {!loading && !searched ? (
-          <div className="discovery-suggestion-panel">
-            <span>{recentSearches.length ? 'Recent' : 'Try'}</span>
-            <div className="discovery-suggestions">
-              {(recentSearches.length ? recentSearches : discoveryFallbackSearches).map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => {
-                    setQuery(item)
-                    setSearched(false)
-                  }}
-                >
-                  <Search size={16} />
-                  <span>{item}</span>
-                </button>
-              ))}
+      {loading ? <DiscoverySkeletonSection /> : null}
+
+      {!loading && searched && results.length === 0 ? (
+        <div className="plan-empty-state">
+          <Sparkles size={22} />
+          <div>
+            <h2>No matching plans found</h2>
+            <p>Try a broader location, budget, or mood.</p>
+          </div>
+        </div>
+      ) : null}
+
+      {!loading && results.length > 0 ? (
+        <DiscoverySection
+          section={{
+            id: 'search-results',
+            title: 'Best matches for you',
+            subtitle: '',
+            items: results.map(resultToShowcaseItem),
+          }}
+          onBack={closeSearchResults}
+          onExplore={exploreItem}
+        />
+      ) : null}
+
+      {showBrowseSections ? (
+        <div className="plan-section-stack">
+          {showcaseSections.map((section) => (
+            <DiscoverySection key={section.id} section={section} onExplore={exploreItem} />
+          ))}
+        </div>
+      ) : null}
+
+      {showBrowseSections ? (
+        <RecentSearches
+          items={recentSearches.length ? recentSearches : discoveryFallbackSearches}
+          isFallback={recentSearches.length === 0}
+          onClear={clearRecentSearches}
+          onRemove={removeRecentSearch}
+          onSelect={selectRecentSearch}
+        />
+      ) : null}
+    </section>
+  )
+}
+
+function DiscoverySection({
+  onBack,
+  onExplore,
+  section,
+}: {
+  onBack?: () => void
+  onExplore: (item: DiscoveryShowcaseItem) => void
+  section: DiscoverySectionData
+}) {
+  if (section.items.length === 0) return null
+
+  return (
+    <section className="plan-discovery-section" aria-labelledby={`${section.id}-title`}>
+      <div className="plan-section-heading">
+        <div>
+          <h2 id={`${section.id}-title`}>{section.title}</h2>
+          {section.subtitle ? <p>{section.subtitle}</p> : null}
+        </div>
+        {section.id === 'search-results' && onBack ? (
+          <button className="plan-section-back" type="button" onClick={onBack}>
+            <ArrowLeft size={16} />
+            Back
+          </button>
+        ) : (
+          <button type="button" onClick={() => onExplore(section.items[0])}>
+            See all
+            <ArrowRight size={16} />
+          </button>
+        )}
+      </div>
+      {section.id === 'search-results' ? (
+        <div className="discovery-result-list">
+          {section.items.map((item) =>
+            item.source ? (
+              <DiscoveryResultCard key={item.id} result={item.source} />
+            ) : (
+              <DiscoveryCard item={item} key={item.id} onExplore={onExplore} />
+            ),
+          )}
+        </div>
+      ) : (
+        <div className="plan-card-row">
+          {section.items.map((item) => (
+            <DiscoveryCard item={item} key={item.id} onExplore={onExplore} />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function DiscoveryCard({
+  item,
+  onExplore,
+}: {
+  item: DiscoveryShowcaseItem
+  onExplore: (item: DiscoveryShowcaseItem) => void
+}) {
+  const FallbackIcon = discoveryIconForCategory(item.category)
+  const cardTone = discoveryToneForCategory(item.category)
+  const [saved, setSaved] = useState(() =>
+    item.source ? loadDiscoverySavedBusinesses().includes(item.source.business_id) : false,
+  )
+
+  function toggleSave(event: MouseEvent<HTMLButtonElement>) {
+    event.stopPropagation()
+    if (!item.source) {
+      setSaved((current) => !current)
+      return
+    }
+    const next = toggleDiscoverySavedBusiness(item.source.business_id)
+    setSaved(next.includes(item.source.business_id))
+  }
+
+  return (
+    <article className={`plan-discovery-card ${cardTone}`}>
+      <button
+        className="plan-discovery-card-main"
+        type="button"
+        onClick={() => onExplore(item)}
+      >
+        <div className="plan-discovery-card-media">
+          {item.imageUrl ? (
+            <img src={item.imageUrl} alt={item.title} loading="lazy" decoding="async" />
+          ) : (
+            <div className="plan-discovery-card-fallback">
+              <FallbackIcon size={38} />
             </div>
+          )}
+          {item.dateLabel ? <span className="plan-date-badge">{item.dateLabel}</span> : null}
+          {item.offer ? <span className="plan-offer-badge">{item.offer}</span> : null}
+        </div>
+        <div className="plan-discovery-card-body">
+          <div>
+            <span className="plan-card-category">{item.category}</span>
+            <h3>{item.title}</h3>
+            <p>{item.businessName}</p>
           </div>
-        ) : null}
-        {!loading && searched && results.length === 0 ? (
-          <div className="discovery-state">No matching plans found</div>
-        ) : null}
-        {!loading && results.length > 0 ? (
-          <div className="discovery-result-list">
-            {results.map((result) => (
-              <DiscoveryResultCard key={result.id} result={result} />
-            ))}
+          <div className="plan-card-meta">
+            {item.rating ? (
+              <span>
+                <Star size={14} fill="currentColor" />
+                {item.rating.toFixed(1)}
+                {item.reviews ? ` (${compactDiscoveryCount(item.reviews)})` : ''}
+              </span>
+            ) : null}
+            {item.distance ? <span>{item.distance}</span> : null}
+            {item.price ? <span>{item.price}</span> : null}
           </div>
+          <div className="plan-card-footer">
+            <span>{item.reason}</span>
+            <strong>{item.locality}</strong>
+          </div>
+        </div>
+      </button>
+      <button
+        aria-label={saved ? 'Saved' : 'Save'}
+        className={saved ? 'plan-card-save active' : 'plan-card-save'}
+        title={saved ? 'Saved' : 'Save'}
+        type="button"
+        onClick={toggleSave}
+      >
+        <Bookmark size={18} fill={saved ? 'currentColor' : 'none'} />
+      </button>
+    </article>
+  )
+}
+
+function RecentSearches({
+  isFallback,
+  items,
+  onClear,
+  onRemove,
+  onSelect,
+}: {
+  isFallback: boolean
+  items: string[]
+  onClear: () => void
+  onRemove: (item: string) => void
+  onSelect: (item: string) => void
+}) {
+  if (items.length === 0) return null
+
+  return (
+    <section className="plan-recent-searches" aria-labelledby="recent-searches-title">
+      <div className="plan-section-heading compact">
+        <div>
+          <h2 id="recent-searches-title">Continue exploring</h2>
+          <p>{isFallback ? 'Try one of these Zumers searches.' : 'Your recent discovery searches.'}</p>
+        </div>
+        {!isFallback ? (
+          <button type="button" onClick={onClear}>
+            Clear all
+          </button>
         ) : null}
+      </div>
+      <div className="plan-recent-row">
+        {items.map((item) => (
+          <span className="plan-recent-pill" key={item}>
+            <button type="button" onClick={() => onSelect(item)}>
+              <Search size={15} />
+              <span>{item}</span>
+            </button>
+            {!isFallback ? (
+              <button
+                aria-label={`Remove ${item}`}
+                className="plan-recent-remove"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onRemove(item)
+                }}
+              >
+                <X size={14} />
+              </button>
+            ) : null}
+          </span>
+        ))}
       </div>
     </section>
   )
+}
+
+function DiscoverySkeletonSection() {
+  return (
+    <section className="plan-discovery-section" aria-label="Loading recommendations">
+      <div className="plan-section-heading">
+        <div>
+          <h2>Finding the right plans</h2>
+          <p>Checking nearby places, timing, budget, and mood.</p>
+        </div>
+      </div>
+      <div className="plan-card-row">
+        {[0, 1, 2].map((item) => (
+          <div className="plan-card-skeleton" key={item}>
+            <span />
+            <strong />
+            <p />
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function buildDiscoverySections(results: DiscoverySearchResult[]): DiscoverySectionData[] {
+  if (results.length === 0) return discoveryDemoSections
+
+  const mapped = results.map(resultToShowcaseItem)
+  const budgetItems = mapped.filter((item) =>
+    /budget|under|rs|from/i.test(item.price ?? item.reason),
+  )
+  const eventItems = mapped.filter((item) =>
+    /event|music|comedy|workshop|ticket|show|live/i.test(`${item.category} ${item.reason} ${item.title}`),
+  )
+  const groupItems = mapped.filter((item) =>
+    /group|friends|family|people/i.test(`${item.reason} ${item.title}`),
+  )
+
+  return [
+    {
+      id: 'tonight',
+      title: 'In the spotlight',
+      subtitle: 'Fresh matches from your latest search.',
+      items: mapped.slice(0, 4),
+    },
+    {
+      id: 'trending',
+      title: 'Trending near you',
+      subtitle: 'Places and activities getting attention nearby.',
+      items: mapped.slice(4, 8).length ? mapped.slice(4, 8) : mapped.slice(0, 4),
+    },
+    {
+      id: 'budget',
+      title: 'Great plans under your budget',
+      subtitle: 'Options that keep spend predictable.',
+      items: budgetItems.length ? budgetItems.slice(0, 4) : mapped.slice(0, 4),
+    },
+    {
+      id: 'groups',
+      title: 'Perfect for your group',
+      subtitle: 'Shortlist-worthy places for friends and family.',
+      items: groupItems.length ? groupItems.slice(0, 4) : mapped.slice(0, 4),
+    },
+    {
+      id: 'weekend',
+      title: 'Events this weekend',
+      subtitle: 'Shows, workshops, and activities to book ahead.',
+      items: eventItems.length ? eventItems.slice(0, 4) : mapped.slice(0, 3),
+    },
+  ].filter((section) => section.items.length > 0)
+}
+
+function resultToShowcaseItem(result: DiscoverySearchResult): DiscoveryShowcaseItem {
+  const locality = [result.area, result.city].filter(Boolean).join(', ') || result.location
+  const price = discoveryPriceLabel(result)
+  return {
+    id: result.id,
+    category: result.subcategory ?? result.category,
+    title: result.title,
+    businessName: result.business_name,
+    locality,
+    reason: result.reasons[0] ?? result.best_for ?? (result.open_now ? 'Open now' : 'Worth shortlisting'),
+    rating: result.score ? Math.max(3.8, Math.min(4.9, 3.9 + result.score / 250)) : undefined,
+    reviews: result.likes_received,
+    distance: result.distance_km ? `${result.distance_km} km` : undefined,
+    price: price ?? undefined,
+    status: result.open_now ? 'Open now' : undefined,
+    offer: result.active_offer_title,
+    dateLabel: result.next_event_title ? 'Event' : undefined,
+    imageUrl: result.image_url,
+    source: result,
+  }
+}
+
+function discoveryIconForCategory(category: string) {
+  const normalized = category.toLowerCase()
+  const matchedService = discoveryServices.find((service) => {
+    const label = service.label.toLowerCase()
+    const serviceText = `${label} ${service.query} ${service.chips.join(' ')}`.toLowerCase()
+    return serviceText.includes(normalized) || normalized.includes(label)
+  })
+  if (matchedService) return matchedService.icon
+  if (/dining|dinner|restaurant|food|momos|chaat/.test(normalized)) return Utensils
+  if (/movie|show|cinema|nightlife/.test(normalized)) return Clapperboard
+  if (/event|music|comedy|ticket|workshop/.test(normalized)) return Ticket
+  if (/shopping|store|market/.test(normalized)) return ShoppingBag
+  if (/play|activity|game|bowling/.test(normalized)) return Dumbbell
+  return Sparkles
+}
+
+function discoveryToneForCategory(category: string) {
+  return /cafe|dining|dinner|restaurant|food|momos|chaat/i.test(category)
+    ? 'plan-discovery-card-food'
+    : 'plan-discovery-card-color'
+}
+
+function firstUserName(user?: User | null) {
+  const name = user?.display_name?.trim() || user?.username?.trim()
+  if (!name) return ''
+  return name.split(/\s+/)[0]
+}
+
+function splitLocationLabel(location: string) {
+  const parts = location
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+  if (parts.length === 0 || location === 'Use current location') {
+    return {
+      primary: 'Use current location',
+      secondary: 'Tap to personalize plans',
+    }
+  }
+  return {
+    primary: parts[0],
+    secondary: parts.slice(1).join(', '),
+  }
 }
 
 function DiscoveryResultCard({ result }: { result: DiscoverySearchResult }) {
@@ -841,6 +1758,14 @@ function DiscoveryResultCard({ result }: { result: DiscoverySearchResult }) {
     ? `${Math.round(result.typical_duration_minutes / 60 * 10) / 10} hr`
     : null
   const location = [result.area, result.city].filter(Boolean).join(', ') || result.location
+  const rating = result.score ? Math.max(3.8, Math.min(4.9, 3.9 + result.score / 250)) : null
+  const distance = typeof result.distance_km === 'number' ? `${Math.round(result.distance_km * 10) / 10} km` : null
+  const displayTitle = result.business_name || result.title
+  const specialitySource = result.subcategory ?? result.category
+  const speciality = specialitySource.split(/[,\s/&]+/).find(Boolean) ?? 'Place'
+  const costLine = price ? `${speciality} - ${price}` : speciality
+  const statusLabel = result.open_now ? 'Open now' : 'Closed now'
+  const offerLine = result.active_offer_title ?? result.next_event_title
   const [saved, setSaved] = useState(() => loadDiscoverySavedBusinesses().includes(result.business_id))
   const [actionStatus, setActionStatus] = useState<string | null>(null)
   const [liked, setLiked] = useState(() => result.liked_by_me ?? false)
@@ -950,49 +1875,38 @@ function DiscoveryResultCard({ result }: { result: DiscoverySearchResult }) {
     <article className="discovery-result-card">
       <div className="discovery-result-media">
         {result.image_url ? (
-          <img src={result.image_url} alt="" />
+          <img src={result.image_url} alt={displayTitle} loading="lazy" decoding="async" />
         ) : (
           <div className="discovery-result-image">
             <Sparkles size={24} />
           </div>
         )}
-        <div className="discovery-media-badge">
-          {result.result_type === 'experience' ? 'Experience' : 'Place'}
-        </div>
+        {rating ? (
+          <div className="discovery-media-badge">
+            <span>{rating.toFixed(1)}</span>
+            <Star size={12} fill="currentColor" />
+          </div>
+        ) : null}
       </div>
       <div className="discovery-result-body">
         <div className="discovery-result-heading">
           <div>
-            <span>{result.subcategory ?? result.category}</span>
-            <h3>{result.title}</h3>
+            <h3>{displayTitle}</h3>
           </div>
-          {result.open_now ? <strong>Open</strong> : null}
         </div>
-        <div className="discovery-business-line">
-          <p>{result.business_name}</p>
-          {result.verification_level !== 'unverified' ? <span><Check size={13} /> Verified</span> : null}
-        </div>
-        {result.description ? <p className="discovery-description">{result.description}</p> : null}
-        <div className="discovery-result-meta">
-          <span><MapPin size={15} /> {result.distance_km ? `${result.distance_km} km` : location}</span>
-          {price ? <span><IndianRupee size={15} /> {price}</span> : null}
-          {duration ? <span><Clock size={15} /> {duration}</span> : null}
-          <span><Tags size={15} /> {result.booking_required ? 'Booking' : result.walk_in_available ? 'Walk-in' : result.category}</span>
-        </div>
-        {result.active_offer_title || result.next_event_title ? (
-          <div className="discovery-signal-row">
-            {result.active_offer_title ? <span>{result.active_offer_title}</span> : null}
-            {result.next_event_title ? <span>{result.next_event_title}</span> : null}
+        {distance ? <p className="discovery-distance-line">{distance} from your location</p> : null}
+        {location ? <p className="discovery-location-line">{location}</p> : null}
+        <p className="discovery-speciality-line">{costLine}</p>
+        <p className={result.open_now ? 'discovery-status-line open' : 'discovery-status-line'}>
+          {statusLabel}
+        </p>
+        {offerLine ? (
+          <div className="discovery-offer-chip">
+            <Tags size={14} />
+            <span>{offerLine}</span>
           </div>
         ) : null}
-        {result.reasons.length > 0 ? (
-          <div className="discovery-reasons" aria-label="Why this matched">
-            {result.reasons.slice(0, 2).map((reason) => (
-              <span key={reason}>{reason}</span>
-            ))}
-          </div>
-        ) : null}
-        <div className="discovery-actions">
+        <div className="discovery-result-footer">
           <button
             type="button"
             className="discovery-action-button discovery-like-button"
@@ -1001,17 +1915,18 @@ function DiscoveryResultCard({ result }: { result: DiscoverySearchResult }) {
             onClick={toggleLike}
             disabled={likeBusy}
           >
-            <Heart size={20} fill={liked ? 'currentColor' : 'none'} />
+            <Heart size={18} fill={liked ? 'currentColor' : 'none'} />
             <span>{compactDiscoveryCount(likesCount)}</span>
           </button>
           <button
             type="button"
-            className="discovery-action-button discovery-action-primary"
-            aria-label="Book now"
-            title="Book now"
+            className="discovery-action-button"
+            aria-label="Book"
+            title="Book"
             onClick={bookResult}
           >
-            <CalendarCheck size={20} />
+            <CalendarCheck size={18} />
+            <span>Book</span>
           </button>
           <button
             type="button"
@@ -1020,7 +1935,8 @@ function DiscoveryResultCard({ result }: { result: DiscoverySearchResult }) {
             title="Share"
             onClick={shareResult}
           >
-            <Share2 size={20} />
+            <Share2 size={18} />
+            <span>Share</span>
           </button>
           <button
             type="button"
@@ -1029,7 +1945,8 @@ function DiscoveryResultCard({ result }: { result: DiscoverySearchResult }) {
             title={saved ? 'Saved' : 'Save'}
             onClick={toggleSave}
           >
-            <Bookmark size={20} fill={saved ? 'currentColor' : 'none'} />
+            <Bookmark size={18} fill={saved ? 'currentColor' : 'none'} />
+            <span>{saved ? 'Saved' : 'Save'}</span>
           </button>
         </div>
         {actionStatus ? <span className="discovery-action-status">{actionStatus}</span> : null}
@@ -1281,17 +2198,17 @@ function formatContactTime(value: string) {
 function labelForNotification(type: string) {
   switch (type) {
     case 'friend_request':
-      return 'New friend request'
+      return 'Friend invite'
     case 'friend_accept':
-      return 'Friend request accepted'
+      return 'Friend invite accepted'
     case 'message':
       return 'New message'
     case 'post_reaction':
-      return 'New post reaction'
+      return 'Someone is interested'
     case 'post_comment':
-      return 'New post comment'
+      return 'New reply'
     case 'post_share':
-      return 'Post shared'
+      return 'Sent to Feed'
     default:
       return type.replaceAll('_', ' ')
   }

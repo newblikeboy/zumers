@@ -42,6 +42,19 @@ func parseID(value string) (int64, error) {
 	return id, nil
 }
 
+func optionalPositiveID(value string) (int64, error) {
+	if value == "" {
+		return 0, nil
+	}
+
+	id, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, errors.New("invalid id")
+	}
+
+	return id, nil
+}
+
 func pageLimit(r *http.Request, fallback int, max int) int {
 	raw := r.URL.Query().Get("limit")
 	if raw == "" {

@@ -1,5 +1,4 @@
 import {
-  BadgePlus,
   CalendarCheck,
   ChevronDown,
   ChevronUp,
@@ -23,16 +22,20 @@ import { EmptyState } from '../components/EmptyState'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { api } from '../lib/api'
 import { cloudinaryDeliveryUrl } from '../lib/cloudinary'
-import type { Comment, Post } from '../lib/types'
+import type { Comment, Post, PostMedia } from '../lib/types'
 
 const reelsCachePrefix = 'zumers.reels.'
 const reelFilters = [
   { value: 'all', label: 'For you', icon: Star },
-  { value: 'planning', label: 'Moves', icon: BadgePlus },
   { value: 'mine', label: 'Mine', icon: UserCircle },
 ] as const
 
 type ReelFilter = (typeof reelFilters)[number]['value']
+type ReelItem = {
+  id: string
+  post: Post
+  media: PostMedia
+}
 
 function readCachedReels(userID?: number) {
   if (!userID) return null
@@ -81,6 +84,8 @@ export function ReelsPage() {
   const [activeReelFilter, setActiveReelFilter] = useState<ReelFilter>('all')
   const [reactionBusyIDs, setReactionBusyIDs] = useState<Set<number>>(() => new Set())
   const videoRefs = useRef(new Map<string, HTMLVideoElement>())
+  const reelStackRef = useRef<HTMLDivElement | null>(null)
+  const wheelLockRef = useRef(false)
 
   useEffect(() => {
     if (!user?.id) return
@@ -121,25 +126,29 @@ export function ReelsPage() {
     return () => query.removeEventListener('change', update)
   }, [])
 
-  const allReels = useMemo(
-    () =>
-      posts.flatMap((post) =>
-        reelSourcePosts(post).flatMap((sourcePost) =>
-          (sourcePost.media ?? [])
+  const allReels = useMemo(() => {
+    const seenReelIDs = new Set<string>()
+    const nextReels: ReelItem[] = []
+
+    posts.forEach((post) => {
+      reelSourcePosts(post).forEach((sourcePost) => {
+        const mediaItems = sourcePost.media ?? []
+        mediaItems
           .filter((media) => media.media_type === 'video')
-          .map((media) => ({
-            id: `${sourcePost.id}-${media.id}`,
-            post: sourcePost,
-            media,
-          })),
-        ),
-      ),
-    [posts],
-  )
+          .forEach((media) => {
+            const id = `${sourcePost.id}-${media.id}`
+            if (seenReelIDs.has(id)) return
+            seenReelIDs.add(id)
+            nextReels.push({ id, post: sourcePost, media })
+          })
+      })
+    })
+
+    return nextReels
+  }, [posts])
   const reels = useMemo(
     () =>
       allReels.filter((reel) => {
-        if (activeReelFilter === 'planning') return isPlanningReelPost(reel.post)
         if (activeReelFilter === 'mine') return reel.post.author_id === user?.id
         return true
       }),
@@ -187,6 +196,57 @@ export function ReelsPage() {
       }
     })
   }, [activeReelID, muted, paused, reels])
+
+  useEffect(() => {
+    if (!isMobileReels) return
+
+    const stack = reelStackRef.current
+    if (!stack) return
+
+    function snapBy(delta: number) {
+      const currentIndex = Math.max(
+        0,
+        reels.findIndex((reel) => reel.id === activeReelID),
+      )
+      const nextIndex = Math.min(Math.max(currentIndex + delta, 0), reels.length - 1)
+      const nextReel = reels[nextIndex]
+      const target = stack?.querySelector<HTMLElement>(`[data-reel-id="${nextReel?.id}"]`)
+      if (!nextReel || !target) return
+
+      setActiveReelID(nextReel.id)
+      setPaused(false)
+      target.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    }
+
+    function onWheel(event: WheelEvent) {
+      if (Math.abs(event.deltaY) < 18 || wheelLockRef.current) return
+      event.preventDefault()
+      wheelLockRef.current = true
+      snapBy(event.deltaY > 0 ? 1 : -1)
+      window.setTimeout(() => {
+        wheelLockRef.current = false
+      }, 520)
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (commentsPost || sharePost) return
+      if (event.key === 'ArrowDown' || event.key === 'PageDown' || event.key === ' ') {
+        event.preventDefault()
+        snapBy(1)
+      }
+      if (event.key === 'ArrowUp' || event.key === 'PageUp') {
+        event.preventDefault()
+        snapBy(-1)
+      }
+    }
+
+    stack.addEventListener('wheel', onWheel, { passive: false })
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      stack.removeEventListener('wheel', onWheel)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [activeReelID, commentsPost, isMobileReels, reels, sharePost])
 
   function registerVideo(id: string, node: HTMLVideoElement | null) {
     if (node) {
@@ -299,7 +359,6 @@ export function ReelsPage() {
     reels.findIndex((reel) => reel.id === activeReelID),
   )
   const activeReel = reels[activeReelIndex] ?? reels[0]
-  const planningReelCount = allReels.filter((reel) => isPlanningReelPost(reel.post)).length
   const myReelCount = allReels.filter((reel) => reel.post.author_id === user?.id).length
 
   function scrollToReel(index: number) {
@@ -315,7 +374,6 @@ export function ReelsPage() {
   }
 
   function reelFilterCount(filter: ReelFilter) {
-    if (filter === 'planning') return planningReelCount
     if (filter === 'mine') return myReelCount
     return allReels.length
   }
@@ -363,10 +421,10 @@ export function ReelsPage() {
         </div>
         {loading && reels.length === 0 ? <ReelsSkeleton /> : null}
         {!loading && reels.length === 0 ? (
-          <EmptyState title={activeReelFilter === 'all' ? 'No reels yet. Upload a video post to create one.' : 'No matching reels'} />
+          <EmptyState title={activeReelFilter === 'all' ? 'No Reels yet' : 'No matching Reels'} />
         ) : null}
 
-        <div className="reel-stack">
+        <div className="reel-stack" ref={reelStackRef}>
           {(isMobileReels ? reels : activeReel ? [activeReel] : []).map((reel) => (
             <article
               className="reel-card"
@@ -443,7 +501,7 @@ export function ReelsPage() {
                   onClick={() => openShare(reel.post, 'Who wants to make this a plan?')}
                 >
                   <CalendarCheck size={22} />
-                  <span>Plan</span>
+                  <span>Add</span>
                 </button>
               </div>
             </article>
@@ -519,7 +577,6 @@ export function ReelsPage() {
           <header>
             <div>
               <strong>Share reel</strong>
-              <span>Share this video with friends</span>
             </div>
             <button
               className="icon-button quiet"
@@ -535,13 +592,13 @@ export function ReelsPage() {
           <form className="share-form" onSubmit={submitShare}>
             <textarea
               name="share_content"
-              placeholder="Say something about this reel"
+              placeholder="Add a note"
               value={shareDraft}
               onChange={(event) => setShareDraft(event.target.value)}
             />
             <button className="primary-button">
               <Repeat2 size={18} />
-              <span>Share to feed</span>
+              <span>Send</span>
             </button>
           </form>
         </aside>
@@ -562,25 +619,6 @@ function reelSourcePosts(post: Post) {
     sources.push(post.shared_post)
   }
   return sources
-}
-
-function isPlanningReelPost(post: Post) {
-  const text = [post.content, post.shared_post?.content].filter(Boolean).join(' ').toLowerCase()
-  return [
-    'plan',
-    'join',
-    'tonight',
-    'today',
-    'nearby',
-    'food',
-    'cafe',
-    'momos',
-    'event',
-    'place',
-    'weekend',
-    'meet',
-    'try',
-  ].some((keyword) => text.includes(keyword))
 }
 
 function optimisticPostReaction(post: Post, reactionType?: string): Post {

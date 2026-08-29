@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -169,18 +170,35 @@ func (s *Server) handleConversationsList(w http.ResponseWriter, r *http.Request)
 	defer rows.Close()
 
 	conversations := make([]conversationResponse, 0)
+	conversationIDs := make([]int64, 0)
 	for rows.Next() {
 		item, err := scanConversation(rows)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "could not read conversations")
 			return
 		}
-		_ = s.hydrateConversation(r.Context(), &item, userID)
-		latest, err := s.getLatestMessage(r.Context(), item.ID)
-		if err == nil {
-			item.Latest = &latest
-		}
 		conversations = append(conversations, item)
+		conversationIDs = append(conversationIDs, item.ID)
+	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not read conversations")
+		return
+	}
+
+	if err := s.hydrateConversations(r.Context(), conversations, userID); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load conversation members")
+		return
+	}
+	latestByConversationID, err := s.getLatestMessages(r.Context(), conversationIDs, userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load latest messages")
+		return
+	}
+	for index := range conversations {
+		if latest, ok := latestByConversationID[conversations[index].ID]; ok {
+			latestCopy := latest
+			conversations[index].Latest = &latestCopy
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"conversations": conversations})
@@ -284,15 +302,32 @@ func (s *Server) handleMessageHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	beforeID, err := optionalPositiveID(r.URL.Query().Get("before_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid before_id")
+		return
+	}
+	limit := pageLimit(r, 30, 100)
+	args := []any{conversationID}
+	query := `SELECT id, conversation_id, sender_id, message_type, content, media_url, media_public_id, delivered_at::text, read_at::text, created_at::text
+		 FROM messages
+		 WHERE conversation_id = $1 AND deleted_at IS NULL`
+	if beforeID > 0 {
+		args = append(args, beforeID)
+		query += ` AND (created_at, id) < (
+		    SELECT created_at, id
+		    FROM messages
+		    WHERE id = $2 AND conversation_id = $1 AND deleted_at IS NULL
+		 )`
+	}
+	args = append(args, limit+1)
+	query += ` ORDER BY created_at DESC, id DESC
+		 LIMIT $` + strconv.Itoa(len(args))
+
 	rows, err := s.db.QueryContext(
 		r.Context(),
-		`SELECT id, conversation_id, sender_id, message_type, content, media_url, media_public_id, delivered_at::text, read_at::text, created_at::text
-		 FROM messages
-		 WHERE conversation_id = $1 AND deleted_at IS NULL
-		 ORDER BY created_at DESC
-		 LIMIT $2`,
-		conversationID,
-		pageLimit(r, 50, 100),
+		query,
+		args...,
 	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not load messages")
@@ -307,12 +342,79 @@ func (s *Server) handleMessageHistory(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "could not read messages")
 			return
 		}
-		_ = s.hydrateMessageReceiptCounts(r.Context(), &message)
-		_ = s.hydrateBusinessShareVoteSummary(r.Context(), &message, currentUserID(r))
 		messages = append(messages, message)
 	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not read messages")
+		return
+	}
+	hasMore := len(messages) > limit
+	if hasMore {
+		messages = messages[:limit]
+	}
+	if r.URL.Query().Get("fast") != "1" {
+		if err := s.hydrateMessages(r.Context(), messages, currentUserID(r), false); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not load message metadata")
+			return
+		}
+	}
 
-	writeJSON(w, http.StatusOK, map[string]any{"messages": messages})
+	var nextBeforeID *int64
+	if len(messages) > 0 {
+		id := messages[len(messages)-1].ID
+		nextBeforeID = &id
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"messages":       messages,
+		"has_more":       hasMore,
+		"next_before_id": nextBeforeID,
+	})
+}
+
+func (s *Server) handleMessageReceipts(w http.ResponseWriter, r *http.Request) {
+	messageID, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid message id")
+		return
+	}
+
+	var conversationID int64
+	err = s.db.QueryRowContext(
+		r.Context(),
+		`SELECT conversation_id
+		 FROM messages
+		 WHERE id = $1 AND deleted_at IS NULL`,
+		messageID,
+	).Scan(&conversationID)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "message not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load message")
+		return
+	}
+	if !s.isConversationParticipant(r.Context(), conversationID, currentUserID(r)) {
+		writeError(w, http.StatusForbidden, "conversation not found")
+		return
+	}
+
+	summary, err := s.messageReceiptSnapshot(r.Context(), messageID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load message receipts")
+		return
+	}
+	receipts, err := s.messageReceiptDetails(r.Context(), messageID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load message receipts")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"summary":  summary,
+		"receipts": receipts,
+	})
 }
 
 func (s *Server) handleConversationRead(w http.ResponseWriter, r *http.Request) {
@@ -515,23 +617,66 @@ func (s *Server) getConversation(ctx context.Context, conversationID int64, view
 	return item, nil
 }
 
-func (s *Server) getLatestMessage(ctx context.Context, conversationID int64) (messageResponse, error) {
-	row := s.db.QueryRowContext(
-		ctx,
-		`SELECT id, conversation_id, sender_id, message_type, content, media_url, media_public_id, delivered_at::text, read_at::text, created_at::text
-		 FROM messages
-		 WHERE conversation_id = $1 AND deleted_at IS NULL
-		 ORDER BY created_at DESC
-		 LIMIT 1`,
-		conversationID,
-	)
-	message, err := scanMessage(row)
-	if err != nil {
-		return messageResponse{}, err
+func (s *Server) getLatestMessages(ctx context.Context, conversationIDs []int64, viewerID int64) (map[int64]messageResponse, error) {
+	messagesByConversationID := make(map[int64]messageResponse)
+	if len(conversationIDs) == 0 {
+		return messagesByConversationID, nil
 	}
-	_ = s.hydrateMessageReceiptCounts(ctx, &message)
-	_ = s.hydrateBusinessShareVoteSummary(ctx, &message, 0)
-	return message, nil
+
+	placeholders := make([]string, 0, len(conversationIDs))
+	args := make([]any, 0, len(conversationIDs))
+	seen := make(map[int64]struct{}, len(conversationIDs))
+	for _, conversationID := range conversationIDs {
+		if conversationID <= 0 {
+			continue
+		}
+		if _, exists := seen[conversationID]; exists {
+			continue
+		}
+		seen[conversationID] = struct{}{}
+		args = append(args, conversationID)
+		placeholders = append(placeholders, "$"+strconv.Itoa(len(args)))
+	}
+	if len(args) == 0 {
+		return messagesByConversationID, nil
+	}
+
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT DISTINCT ON (conversation_id)
+		        id, conversation_id, sender_id, message_type, content, media_url, media_public_id,
+		        delivered_at::text, read_at::text, created_at::text
+		 FROM messages
+		 WHERE conversation_id IN (`+strings.Join(placeholders, ",")+`)
+		   AND deleted_at IS NULL
+		 ORDER BY conversation_id, created_at DESC, id DESC`,
+		args...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	messages := make([]messageResponse, 0)
+	for rows.Next() {
+		message, err := scanMessage(rows)
+		if err != nil {
+			return nil, err
+		}
+		messages = append(messages, message)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if err := s.hydrateMessages(ctx, messages, viewerID, true); err != nil {
+		return nil, err
+	}
+	for _, message := range messages {
+		messagesByConversationID[message.ConversationID] = message
+	}
+
+	return messagesByConversationID, nil
 }
 
 func (s *Server) isConversationParticipant(ctx context.Context, conversationID int64, userID int64) bool {
@@ -628,6 +773,91 @@ func (s *Server) hydrateConversation(ctx context.Context, item *conversationResp
 		otherID := otherParticipant(item.UserOneID, *item.UserTwoID, viewerID)
 		if otherUser, err := s.getUserResponse(ctx, otherID); err == nil {
 			item.OtherUser = &otherUser
+		}
+	}
+
+	return nil
+}
+
+func (s *Server) hydrateConversations(ctx context.Context, conversations []conversationResponse, viewerID int64) error {
+	if len(conversations) == 0 {
+		return nil
+	}
+
+	placeholders := make([]string, 0, len(conversations))
+	args := make([]any, 0, len(conversations))
+	seen := make(map[int64]struct{}, len(conversations))
+	for _, conversation := range conversations {
+		if conversation.ID <= 0 {
+			continue
+		}
+		if _, exists := seen[conversation.ID]; exists {
+			continue
+		}
+		seen[conversation.ID] = struct{}{}
+		args = append(args, conversation.ID)
+		placeholders = append(placeholders, "$"+strconv.Itoa(len(args)))
+	}
+	if len(args) == 0 {
+		return nil
+	}
+
+	type memberRef struct {
+		userID int64
+		role   string
+	}
+	membersByConversationID := make(map[int64][]memberRef, len(args))
+	userIDs := make([]int64, 0)
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT conversation_id, user_id, role
+		 FROM conversation_members
+		 WHERE conversation_id IN (`+strings.Join(placeholders, ",")+`)
+		   AND left_at IS NULL
+		 ORDER BY conversation_id, joined_at, id`,
+		args...,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var conversationID int64
+		var member memberRef
+		if err := rows.Scan(&conversationID, &member.userID, &member.role); err != nil {
+			return err
+		}
+		membersByConversationID[conversationID] = append(membersByConversationID[conversationID], member)
+		userIDs = append(userIDs, member.userID)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	usersByID, err := s.getUserResponsesByID(ctx, userIDs)
+	if err != nil {
+		return err
+	}
+	for index := range conversations {
+		members := membersByConversationID[conversations[index].ID]
+		conversations[index].Members = make([]userResponse, 0, len(members))
+		for _, member := range members {
+			user, exists := usersByID[member.userID]
+			if !exists {
+				continue
+			}
+			role := member.role
+			user.Role = &role
+			conversations[index].Members = append(conversations[index].Members, user)
+		}
+		conversations[index].MemberCount = len(conversations[index].Members)
+
+		if conversations[index].ConversationType == "direct" && conversations[index].UserTwoID != nil {
+			otherID := otherParticipant(conversations[index].UserOneID, *conversations[index].UserTwoID, viewerID)
+			if otherUser, ok := usersByID[otherID]; ok {
+				conversations[index].OtherUser = &otherUser
+			}
 		}
 	}
 
@@ -767,6 +997,216 @@ func (s *Server) hydrateMessageReceiptCounts(ctx context.Context, message *messa
 	}
 	message.Receipts = receipts
 	return nil
+}
+
+func (s *Server) hydrateMessages(ctx context.Context, messages []messageResponse, viewerID int64, includeReceiptDetails bool) error {
+	if len(messages) == 0 {
+		return nil
+	}
+
+	messageByID := make(map[int64]*messageResponse, len(messages))
+	placeholders := make([]string, 0, len(messages))
+	args := make([]any, 0, len(messages))
+	businessShareIDs := make([]int64, 0)
+	for index := range messages {
+		message := &messages[index]
+		if message.ID <= 0 {
+			continue
+		}
+		if _, exists := messageByID[message.ID]; exists {
+			continue
+		}
+		messageByID[message.ID] = message
+		args = append(args, message.ID)
+		placeholders = append(placeholders, "($"+strconv.Itoa(len(args))+"::bigint)")
+		if message.MessageType == "business_share" {
+			businessShareIDs = append(businessShareIDs, message.ID)
+		}
+	}
+	if len(args) == 0 {
+		return nil
+	}
+
+	if err := s.hydrateMessageReceiptSnapshots(ctx, messageByID, placeholders, args); err != nil {
+		return err
+	}
+	if includeReceiptDetails {
+		if err := s.hydrateMessageReceiptDetails(ctx, messageByID, args); err != nil {
+			return err
+		}
+	}
+	if err := s.hydrateBusinessShareVoteSummaries(ctx, messageByID, businessShareIDs, viewerID); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *Server) hydrateMessageReceiptSnapshots(ctx context.Context, messageByID map[int64]*messageResponse, valuePlaceholders []string, args []any) error {
+	rows, err := s.db.QueryContext(
+		ctx,
+		`WITH target_messages(id) AS (VALUES `+strings.Join(valuePlaceholders, ",")+`)
+		 SELECT tm.id,
+		        COUNT(mr.message_id)::int,
+		        COUNT(mr.delivered_at)::int,
+		        COUNT(mr.read_at)::int,
+		        MAX(mr.delivered_at)::text,
+		        MAX(mr.read_at)::text
+		 FROM target_messages tm
+		 LEFT JOIN message_receipts mr ON mr.message_id = tm.id
+		 GROUP BY tm.id`,
+		args...,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var messageID int64
+		var deliveredAt, readAt sql.NullString
+		var recipientCount, deliveredCount, readCount int
+		if err := rows.Scan(&messageID, &recipientCount, &deliveredCount, &readCount, &deliveredAt, &readAt); err != nil {
+			return err
+		}
+		message, ok := messageByID[messageID]
+		if !ok {
+			continue
+		}
+		message.RecipientCount = recipientCount
+		message.DeliveredCount = deliveredCount
+		message.ReadCount = readCount
+		message.DeliveredAt = nullableString(deliveredAt)
+		message.ReadAt = nullableString(readAt)
+	}
+
+	return rows.Err()
+}
+
+func (s *Server) hydrateMessageReceiptDetails(ctx context.Context, messageByID map[int64]*messageResponse, args []any) error {
+	placeholders := make([]string, 0, len(args))
+	for index := range args {
+		placeholders = append(placeholders, "$"+strconv.Itoa(index+1))
+	}
+
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT message_id, user_id, delivered_at::text, read_at::text
+		 FROM message_receipts
+		 WHERE message_id IN (`+strings.Join(placeholders, ",")+`)
+		 ORDER BY message_id, user_id`,
+		args...,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	receiptsByMessageID := make(map[int64][]messageReceiptItem, len(messageByID))
+	userIDs := make([]int64, 0)
+	for rows.Next() {
+		var item messageReceiptItem
+		var deliveredAt, readAt sql.NullString
+		if err := rows.Scan(&item.MessageID, &item.UserID, &deliveredAt, &readAt); err != nil {
+			return err
+		}
+		item.DeliveredAt = nullableString(deliveredAt)
+		item.ReadAt = nullableString(readAt)
+		receiptsByMessageID[item.MessageID] = append(receiptsByMessageID[item.MessageID], item)
+		userIDs = append(userIDs, item.UserID)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	usersByID, err := s.getUserResponsesByID(ctx, userIDs)
+	if err != nil {
+		return err
+	}
+	for messageID, receipts := range receiptsByMessageID {
+		for index := range receipts {
+			if user, exists := usersByID[receipts[index].UserID]; exists {
+				receipts[index].User = &user
+			}
+		}
+		if message, exists := messageByID[messageID]; exists {
+			message.Receipts = receipts
+		}
+	}
+
+	return nil
+}
+
+func (s *Server) hydrateBusinessShareVoteSummaries(ctx context.Context, messageByID map[int64]*messageResponse, messageIDs []int64, viewerID int64) error {
+	if len(messageIDs) == 0 {
+		return nil
+	}
+
+	placeholders := make([]string, 0, len(messageIDs))
+	args := make([]any, 0, len(messageIDs)+1)
+	seen := make(map[int64]struct{}, len(messageIDs))
+	for _, messageID := range messageIDs {
+		if _, exists := seen[messageID]; exists {
+			continue
+		}
+		seen[messageID] = struct{}{}
+		args = append(args, messageID)
+		placeholders = append(placeholders, "$"+strconv.Itoa(len(args)))
+	}
+	viewerPlaceholder := "$" + strconv.Itoa(len(args)+1)
+	args = append(args, viewerID)
+
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT
+		   m.id,
+		   COUNT(DISTINCT cm.user_id) AS participant_count,
+		   COUNT(DISTINCT CASE WHEN bsv.vote = 'like' THEN bsv.user_id END) AS like_count,
+		   COUNT(DISTINCT CASE WHEN bsv.vote = 'dislike' THEN bsv.user_id END) AS dislike_count,
+		   MAX(CASE WHEN bsv.user_id = `+viewerPlaceholder+` THEN bsv.vote END) AS my_vote,
+		   c.conversation_type
+		 FROM messages m
+		 JOIN conversations c ON c.id = m.conversation_id
+		 JOIN conversation_members cm ON cm.conversation_id = c.id AND cm.left_at IS NULL
+		 LEFT JOIN business_share_votes bsv ON bsv.message_id = m.id
+		 WHERE m.id IN (`+strings.Join(placeholders, ",")+`)
+		 GROUP BY m.id, c.conversation_type`,
+		args...,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var summary businessVoteSummary
+		var conversationType string
+		var myVote sql.NullString
+		if err := rows.Scan(
+			&summary.MessageID,
+			&summary.ParticipantCount,
+			&summary.LikeCount,
+			&summary.DislikeCount,
+			&myVote,
+			&conversationType,
+		); err != nil {
+			return err
+		}
+		summary.MyVote = nullableString(myVote)
+		summary.AllLiked = summary.ParticipantCount > 0 && summary.LikeCount == summary.ParticipantCount
+		if summary.AllLiked {
+			text := "This is the perfect choice for your group."
+			if conversationType == "direct" || summary.ParticipantCount <= 2 {
+				text = "This is best for both of you."
+			}
+			summary.RecommendationText = &text
+		}
+		if message, exists := messageByID[summary.MessageID]; exists {
+			message.BusinessVote = &summary
+		}
+	}
+
+	return rows.Err()
 }
 
 func (s *Server) hydrateBusinessShareVoteSummary(ctx context.Context, message *messageResponse, viewerID int64) error {

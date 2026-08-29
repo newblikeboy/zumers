@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"database/sql"
 	"log/slog"
 	"net/http"
@@ -17,6 +18,7 @@ type Server struct {
 	logger       *slog.Logger
 	mux          *http.ServeMux
 	chatHub      *ChatHub
+	wsTickets    *wsTicketStore
 	rateLimiters *rateLimiterStore
 }
 
@@ -33,12 +35,13 @@ func NewServer(cfg config.Config, db *sql.DB, logger *slog.Logger) (http.Handler
 		logger:       logger,
 		mux:          http.NewServeMux(),
 		chatHub:      NewChatHub(),
+		wsTickets:    newWSTicketStore(),
 		rateLimiters: newRateLimiterStore(),
 	}
 
 	server.routes()
 
-	return server.withLogging(server.withCORS(server.mux)), nil
+	return server.withLogging(server.withCORS(server.withRequestTimeout(server.mux))), nil
 }
 
 func (s *Server) routes() {
@@ -63,6 +66,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /api/v1/business/media/sign-upload", s.withBusinessAuth(s.withRateLimit("business-uploads", 20, 5, s.handleCloudinarySignUpload)))
 
 	s.mux.HandleFunc("GET /api/v1/users/search", s.withAuth(s.handleUserSearch))
+	s.mux.HandleFunc("GET /api/v1/location/reverse", s.withAuth(s.withRateLimit("location-reverse", 20, 5, s.handleLocationReverse)))
 	s.mux.HandleFunc("GET /api/v1/discovery/search", s.withAuth(s.withRateLimit("discovery-search", 60, 20, s.handleDiscoverySearch)))
 	s.mux.HandleFunc("POST /api/v1/businesses/{id}/like", s.withAuth(s.handleBusinessLikeSet))
 	s.mux.HandleFunc("DELETE /api/v1/businesses/{id}/like", s.withAuth(s.handleBusinessLikeDelete))
@@ -98,9 +102,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/conversations/{id}/messages", s.withAuth(s.handleMessageHistory))
 	s.mux.HandleFunc("POST /api/v1/conversations/{id}/messages", s.withAuth(s.withRateLimit("messages", 60, 20, s.handleMessageCreate)))
 	s.mux.HandleFunc("POST /api/v1/messages/{id}/business-vote", s.withAuth(s.handleBusinessShareVoteSet))
+	s.mux.HandleFunc("GET /api/v1/messages/{id}/receipts", s.withAuth(s.handleMessageReceipts))
 	s.mux.HandleFunc("POST /api/v1/conversations/{id}/read", s.withAuth(s.handleConversationRead))
 	s.mux.HandleFunc("GET /api/v1/notifications", s.withAuth(s.handleNotificationsList))
 	s.mux.HandleFunc("POST /api/v1/notifications/{id}/read", s.withAuth(s.handleNotificationRead))
+	s.mux.HandleFunc("POST /api/v1/ws/chat-ticket", s.withAuth(s.withRateLimit("ws-ticket", 60, 10, s.handleChatTicket)))
 	s.mux.HandleFunc("GET /ws/chat", s.withRateLimit("ws", 30, 5, s.handleChatWebSocket))
 }
 
@@ -136,5 +142,18 @@ func (s *Server) withLogging(next http.Handler) http.Handler {
 		start := time.Now()
 		next.ServeHTTP(w, r)
 		s.logger.Info("request completed", "method", r.Method, "path", r.URL.Path, "duration_ms", time.Since(start).Milliseconds())
+	})
+}
+
+func (s *Server) withRequestTimeout(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/ws/chat" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

@@ -1,4 +1,5 @@
 import {
+  CalendarCheck,
   Globe2,
   Heart,
   LockKeyhole,
@@ -50,6 +51,7 @@ export function PostCard({
   const [commentBusy, setCommentBusy] = useState(false)
   const [shareBusy, setShareBusy] = useState(false)
   const timestamp = useMemo(() => formatRelativeTime(post.created_at), [post.created_at])
+  const pulseType = classifyPulsePost(post)
 
   useEffect(() => {
     if (!commentsOpen) return
@@ -180,6 +182,7 @@ export function PostCard({
             {visibilityLabel(post.visibility)}
           </span>
         </div>
+        <span className={`pulse-type-badge ${pulseType.tone}`}>{pulseType.label}</span>
         {user?.id === post.author_id && onDelete ? (
           <button
             className="icon-button quiet"
@@ -194,6 +197,11 @@ export function PostCard({
           </button>
         )}
       </header>
+
+      <div className="plan-ribbon" aria-label="Plan context">
+        <span><CalendarCheck size={14} /> Plan</span>
+        <span><Users size={14} /> {visibilityLabel(post.visibility)}</span>
+      </div>
 
       {post.content ? <p className="post-copy">{post.content}</p> : null}
 
@@ -228,8 +236,8 @@ export function PostCard({
             }
             disabled={busy}
             onClick={toggleLike}
-            aria-label={post.viewer_reaction ? 'Remove reaction' : 'Like post'}
-            title={post.viewer_reaction ? 'Remove reaction' : 'Like post'}
+            aria-label={post.viewer_reaction ? 'Remove interest' : 'Show interest'}
+            title={post.viewer_reaction ? 'Remove interest' : 'Show interest'}
           >
             <Heart size={20} fill={post.viewer_reaction ? 'currentColor' : 'none'} />
             <span>Like</span>
@@ -241,7 +249,7 @@ export function PostCard({
           onClick={() => setCommentsOpen((value) => !value)}
         >
           <MessageCircle size={19} />
-          <span>Comment</span>
+          <span>Discuss</span>
           <strong className="engagement-count">{post.comment_count}</strong>
         </button>
         <button
@@ -249,7 +257,7 @@ export function PostCard({
           onClick={() => setShareOpen((value) => !value)}
         >
           <Repeat2 size={19} />
-          <span>Share</span>
+          <span>Send</span>
           <strong className="engagement-count">{post.share_count}</strong>
         </button>
       </div>
@@ -294,7 +302,7 @@ export function PostCard({
       {shareOpen ? (
         <div className="share-panel">
           <div className="share-panel-header">
-            <strong>Share post</strong>
+            <strong>Send to a circle</strong>
             <button
               className="icon-button quiet"
               title="Close share"
@@ -306,7 +314,7 @@ export function PostCard({
           <form className="share-form" onSubmit={share}>
             <textarea
               name="share_content"
-              placeholder="Say something about this"
+              placeholder="Add a note"
             />
             <SharedPostPreview post={post} compact />
             <div className="composer-controls">
@@ -317,7 +325,7 @@ export function PostCard({
               </select>
               <button className="primary-button" disabled={shareBusy}>
                 <Repeat2 size={18} />
-                <span>{shareBusy ? 'Sharing' : 'Share now'}</span>
+                <span>{shareBusy ? 'Sending' : 'Send'}</span>
               </button>
             </div>
           </form>
@@ -401,6 +409,28 @@ function visibilityLabel(visibility: Post['visibility']) {
   if (visibility === 'public') return 'Public'
   if (visibility === 'private') return 'Only me'
   return 'Friends'
+}
+
+function classifyPulsePost(post: Post) {
+  const text = [post.content, post.shared_post?.content].filter(Boolean).join(' ').toLowerCase()
+  const hasVideo = (post.media ?? []).some((item) => item.media_type === 'video')
+  const hasMedia = (post.media ?? []).length > 0
+  if (text.includes('vote') || text.includes('poll')) {
+    return { label: 'Poll', tone: 'voting' }
+  }
+  if (text.includes('event') || text.includes('show') || text.includes('ticket')) {
+    return { label: 'Event', tone: 'event' }
+  }
+  if (text.includes('place') || text.includes('cafe') || text.includes('food') || text.includes('restaurant')) {
+    return { label: 'Place', tone: 'place' }
+  }
+  if (hasVideo) {
+    return { label: 'Spot', tone: 'spot' }
+  }
+  if (hasMedia) {
+    return { label: 'Moment', tone: 'moment' }
+  }
+  return { label: 'Plan', tone: 'idea' }
 }
 
 function formatRelativeTime(value: string) {

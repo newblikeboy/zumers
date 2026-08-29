@@ -19,6 +19,7 @@ import type {
   FriendRequest,
   FriendSuggestion,
   Message,
+  MessageReceipt,
   NotificationItem,
   Post,
   PostMediaInput,
@@ -29,6 +30,12 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080/api/v1'
 const businessAccessTokenKey = 'zumers.businessAccessToken'
 
+export type MessageHistoryResponse = {
+  messages: Message[]
+  has_more: boolean
+  next_before_id?: number | null
+}
+
 type TokenStore = {
   accessToken: string | null
   refreshToken: string | null
@@ -37,6 +44,8 @@ type TokenStore = {
 }
 
 let tokenStore: TokenStore | null = null
+let currentUserRequest: Promise<User> | null = null
+let refreshSessionRequest: Promise<AuthResponse> | null = null
 
 export function configureApiTokens(store: TokenStore) {
   tokenStore = store
@@ -55,13 +64,26 @@ export async function apiRequest<T>(
     headers.set('Authorization', `Bearer ${tokenStore.accessToken}`)
   }
 
+  if (
+    retry &&
+    tokenStore?.refreshToken &&
+    shouldRefreshAccessToken(tokenStore.accessToken)
+  ) {
+    const refreshed = await refreshSessionOnce(tokenStore.refreshToken)
+    tokenStore.setTokens({
+      accessToken: refreshed.access_token,
+      refreshToken: refreshed.refresh_token,
+    })
+    return apiRequest<T>(path, options, false)
+  }
+
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers,
   })
 
   if (response.status === 401 && retry && tokenStore?.refreshToken) {
-    const refreshed = await refreshSession(tokenStore.refreshToken)
+    const refreshed = await refreshSessionOnce(tokenStore.refreshToken)
     tokenStore.setTokens({
       accessToken: refreshed.access_token,
       refreshToken: refreshed.refresh_token,
@@ -106,7 +128,12 @@ export const api = {
       body: JSON.stringify({ refresh_token: refreshToken }),
     }),
 
-  me: () => apiRequest<User>('/me'),
+  me: () => {
+    currentUserRequest ??= apiRequest<User>('/me').finally(() => {
+      currentUserRequest = null
+    })
+    return currentUserRequest
+  },
 
   updateProfile: (body: Partial<User>) =>
     apiRequest<User>('/me/profile', {
@@ -252,10 +279,20 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  messages: (conversationId: number) =>
-    apiRequest<{ messages: Message[] }>(
-      `/conversations/${conversationId}/messages`,
-    ),
+  messages: (
+    conversationId: number,
+    options: { fast?: boolean; limit?: number; beforeId?: number; signal?: AbortSignal } = {},
+  ) => {
+    const params = new URLSearchParams()
+    if (options.fast) params.set('fast', '1')
+    if (options.limit) params.set('limit', String(options.limit))
+    if (options.beforeId) params.set('before_id', String(options.beforeId))
+    const query = params.toString()
+    return apiRequest<MessageHistoryResponse>(
+      `/conversations/${conversationId}/messages${query ? `?${query}` : ''}`,
+      { signal: options.signal },
+    )
+  },
 
   sendMessage: (
     conversationId: number,
@@ -288,6 +325,17 @@ export const api = {
       method: 'POST',
     }),
 
+  messageReceipts: (messageId: number) =>
+    apiRequest<{ summary: MessageReceipt; receipts: MessageReceipt[] }>(
+      `/messages/${messageId}/receipts`,
+    ),
+
+  chatTicket: () =>
+    apiRequest<{ ticket: string; expires_at: string }>('/ws/chat-ticket', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+
   notifications: () =>
     apiRequest<{ notifications: NotificationItem[] }>('/notifications'),
 
@@ -312,6 +360,15 @@ export const api = {
     if (typeof params.radiusKm === 'number') query.set('radius_km', String(params.radiusKm))
     if (params.limit) query.set('limit', String(params.limit))
     return apiRequest<DiscoverySearchResponse>(`/discovery/search?${query.toString()}`)
+  },
+
+  reverseLocation: (params: { latitude: number; longitude: number }) => {
+    const query = new URLSearchParams()
+    query.set('latitude', String(params.latitude))
+    query.set('longitude', String(params.longitude))
+    return apiRequest<{ location: string; primary: string; secondary: string }>(
+      `/location/reverse?${query.toString()}`,
+    )
   },
 }
 
@@ -439,4 +496,31 @@ async function refreshSession(refreshToken: string) {
     throw new Error(data?.error ?? 'Session expired')
   }
   return data as AuthResponse
+}
+
+function refreshSessionOnce(refreshToken: string) {
+  refreshSessionRequest ??= refreshSession(refreshToken).finally(() => {
+    refreshSessionRequest = null
+  })
+  return refreshSessionRequest
+}
+
+function shouldRefreshAccessToken(accessToken: string | null) {
+  if (!accessToken) return true
+
+  const [, payload] = accessToken.split('.')
+  if (!payload) return true
+
+  try {
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = normalized.padEnd(
+      normalized.length + ((4 - normalized.length % 4) % 4),
+      '=',
+    )
+    const claims = JSON.parse(atob(padded)) as { exp?: number }
+    if (!claims.exp) return true
+    return claims.exp * 1000 <= Date.now() + 30000
+  } catch {
+    return true
+  }
 }

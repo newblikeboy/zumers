@@ -219,14 +219,14 @@ export function FriendsPage() {
           </button>
           <h1>Friends</h1>
           <button
-            aria-label="Friends settings"
+            aria-label="Friend settings"
             className="friends-settings-button"
             type="button"
           >
             <Settings size={22} />
           </button>
           <button
-            aria-label="Search friends"
+            aria-label="Search people"
             className="mobile-friends-search-button"
             type="button"
             onClick={openSearch}
@@ -245,7 +245,7 @@ export function FriendsPage() {
           <Search size={18} />
           <input
             ref={searchInputRef}
-            placeholder="Search Friends"
+            placeholder="Search people"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -258,46 +258,46 @@ export function FriendsPage() {
             <X size={18} />
           </button>
         </form>
-        <div className="friends-mobile-chips" aria-label="Friends filters">
+        <div className="friends-mobile-chips" aria-label="Friend filters">
           <button type="button" onClick={() => setActiveSection('suggestions')}>
-            Suggestions
+            Discover
           </button>
           <button type="button" onClick={() => setActiveSection('all')}>
-            Your friends
+            Your people
           </button>
           <button type="button" onClick={() => setActiveSection('birthdays')}>
-            Birthdays
+            Moments
           </button>
         </div>
-        <nav className="friends-menu" aria-label="Friends sections">
+        <nav className="friends-menu" aria-label="Friend sections">
           <FriendsMenuItem
             active={activeSection === 'home'}
             icon={<Users size={23} />}
-            label="Home"
+            label="Overview"
             onClick={() => setActiveSection('home')}
           />
           <FriendsMenuItem
             active={activeSection === 'requests'}
             icon={<UserCheck size={23} />}
-            label="Friend requests"
+            label="Invites"
             onClick={() => setActiveSection('requests')}
           />
           <FriendsMenuItem
             active={activeSection === 'suggestions'}
             icon={<UserPlus size={23} />}
-            label="Suggestions"
+            label="Discover"
             onClick={() => setActiveSection('suggestions')}
           />
           <FriendsMenuItem
             active={activeSection === 'all'}
             icon={<UserMinus size={23} />}
-            label="All friends"
+            label="Your people"
             onClick={() => setActiveSection('all')}
           />
           <FriendsMenuItem
             active={activeSection === 'birthdays'}
             icon={<Gift size={23} />}
-            label="Birthdays"
+            label="Moments"
             onClick={() => setActiveSection('birthdays')}
           />
         </nav>
@@ -309,14 +309,14 @@ export function FriendsPage() {
         {showHome || activeSection === 'requests' ? (
         <section className="friends-section friend-requests-section">
           <div className="friends-section-heading">
-            <h2>Friend Requests ({requests.length})</h2>
+            <h2>Invites ({requests.length})</h2>
             {showHome ? (
               <button type="button" onClick={() => setActiveSection('requests')}>
                 See all
               </button>
             ) : null}
           </div>
-          {requests.length === 0 ? <EmptyState title="No pending requests" /> : null}
+          {requests.length === 0 ? <EmptyState title="No invites" /> : null}
           <div className="friend-card-grid">
             {requests.map((request) => (
               <FriendTile
@@ -338,7 +338,7 @@ export function FriendsPage() {
                   onClick={() => answerRequest(request.id, 'reject')}
                 >
                   <X size={17} />
-                  <span>Delete</span>
+                  <span>Decline</span>
                 </button>
               </FriendTile>
             ))}
@@ -349,7 +349,7 @@ export function FriendsPage() {
         {showHome || activeSection === 'suggestions' ? (
         <section className="friends-section friend-suggestions-section">
           <div className="friends-section-heading">
-            <h2>People You May Know</h2>
+            <h2>Discover</h2>
             {showHome ? (
               <button type="button" onClick={() => setActiveSection('suggestions')}>
                 See all
@@ -357,7 +357,7 @@ export function FriendsPage() {
             ) : null}
           </div>
           {suggestedPeople.length === 0 ? (
-            <EmptyState title="No friend suggestions yet" />
+            <EmptyState title="No suggestions" />
           ) : null}
           <div className="friend-card-grid">
             {suggestedPeople.map(({ person, reason }) => {
@@ -374,10 +374,10 @@ export function FriendsPage() {
                     {requestSent ? <Check size={17} /> : <UserPlus size={17} />}
                     <span>
                       {requestSent
-                        ? 'Request sent'
+                        ? 'Invite sent'
                         : busyAction === `send-${person.id}`
                           ? 'Sending'
-                          : 'Add friend'}
+                          : 'Invite'}
                     </span>
                   </button>
                   {!requestSent ? (
@@ -396,14 +396,14 @@ export function FriendsPage() {
         {showHome || activeSection === 'all' ? (
         <section className="friends-section all-friends-section">
           <div className="friends-section-heading">
-            <h2>All Friends</h2>
+            <h2>Your people</h2>
             {showHome ? (
               <button type="button" onClick={() => setActiveSection('all')}>
                 See all
               </button>
             ) : null}
           </div>
-          {friends.length === 0 ? <EmptyState title="No friends yet" /> : null}
+          {friends.length === 0 ? <EmptyState title="No people yet" /> : null}
           <div className="friend-card-grid">
             {friends.map((friend) => (
               <FriendTile key={friend.id} person={friend}>
@@ -421,7 +421,7 @@ export function FriendsPage() {
                   onClick={() => unfriend(friend.id)}
                 >
                   <UserMinus size={17} />
-                  <span>Unfriend</span>
+                  <span>Remove</span>
                 </button>
               </FriendTile>
             ))}
@@ -432,7 +432,7 @@ export function FriendsPage() {
         {showHome || activeSection === 'birthdays' ? (
           <section className="friends-section birthdays-section">
             <div className="friends-section-heading">
-              <h2>Birthdays</h2>
+              <h2>Moments</h2>
               {showHome ? (
                 <button type="button" onClick={() => setActiveSection('birthdays')}>
                   See all
@@ -440,14 +440,14 @@ export function FriendsPage() {
               ) : null}
             </div>
             {birthdayFriends.length === 0 ? (
-              <EmptyState title="No friend birthdays to show" />
+              <EmptyState title="No moments" />
             ) : null}
             {todayBirthdayFriends.length > 0 ? (
               <BirthdayGroup title="Today" birthdays={todayBirthdayFriends} />
             ) : null}
             {upcomingBirthdayFriends.length > 0 ? (
               <BirthdayGroup
-                title={todayBirthdayFriends.length > 0 ? 'Upcoming' : 'All Birthdays'}
+                title={todayBirthdayFriends.length > 0 ? 'Upcoming' : 'All moments'}
                 birthdays={showHome ? upcomingBirthdayFriends.slice(0, 6) : upcomingBirthdayFriends}
               />
             ) : null}

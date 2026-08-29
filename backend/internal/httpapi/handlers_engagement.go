@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 )
 
@@ -126,17 +127,30 @@ func (s *Server) handlePostCommentsList(w http.ResponseWriter, r *http.Request) 
 	defer rows.Close()
 
 	comments := make([]commentResponse, 0)
+	authorIDs := make([]int64, 0)
 	for rows.Next() {
 		var comment commentResponse
 		if err := rows.Scan(&comment.ID, &comment.PostID, &comment.AuthorID, &comment.Content, &comment.CreatedAt, &comment.UpdatedAt); err != nil {
 			writeError(w, http.StatusInternalServerError, "could not read comments")
 			return
 		}
-		author, err := s.getUserResponse(r.Context(), comment.AuthorID)
-		if err == nil {
-			comment.Author = &author
-		}
 		comments = append(comments, comment)
+		authorIDs = append(authorIDs, comment.AuthorID)
+	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not read comments")
+		return
+	}
+
+	authorsByID, err := s.getUserResponsesByID(r.Context(), authorIDs)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load comment authors")
+		return
+	}
+	for index := range comments {
+		if author, ok := authorsByID[comments[index].AuthorID]; ok {
+			comments[index].Author = &author
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"comments": comments})
@@ -267,24 +281,64 @@ func (s *Server) handlePostShare(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) addPostEngagement(ctx context.Context, viewerID int64, posts []*postResponse) error {
+	postByID := make(map[int64]*postResponse, len(posts))
+	placeholders := make([]string, 0, len(posts))
+	args := make([]any, 0, len(posts)+1)
 	for _, post := range posts {
-		if post == nil {
+		if post == nil || post.ID <= 0 {
 			continue
 		}
-		if err := s.db.QueryRowContext(
-			ctx,
-			`SELECT
-			   (SELECT COUNT(*) FROM post_reactions WHERE post_id = $1),
-			   (SELECT COUNT(*) FROM comments WHERE post_id = $1 AND deleted_at IS NULL),
-			   (SELECT COUNT(*) FROM posts WHERE shared_post_id = $1 AND deleted_at IS NULL),
-			   (SELECT reaction_type FROM post_reactions WHERE post_id = $1 AND user_id = $2 LIMIT 1)`,
-			post.ID,
-			viewerID,
-		).Scan(&post.LikeCount, &post.CommentCount, &post.ShareCount, &nullableReaction{target: &post.ViewerReaction}); err != nil {
+		if _, exists := postByID[post.ID]; exists {
+			continue
+		}
+		postByID[post.ID] = post
+		args = append(args, post.ID)
+		placeholders = append(placeholders, "($"+strconv.Itoa(len(args))+"::bigint)")
+	}
+	if len(args) == 0 {
+		return nil
+	}
+	viewerPlaceholder := "$" + strconv.Itoa(len(args)+1)
+	args = append(args, viewerID)
+
+	rows, err := s.db.QueryContext(
+		ctx,
+		`WITH target_posts(id) AS (VALUES `+strings.Join(placeholders, ",")+`)
+		 SELECT tp.id,
+		        COUNT(DISTINCT pr.user_id)::bigint AS like_count,
+		        COUNT(DISTINCT c.id)::bigint AS comment_count,
+		        COUNT(DISTINCT shared.id)::bigint AS share_count,
+		        MAX(CASE WHEN pr.user_id = `+viewerPlaceholder+` THEN pr.reaction_type END) AS viewer_reaction
+		 FROM target_posts tp
+		 LEFT JOIN post_reactions pr ON pr.post_id = tp.id
+		 LEFT JOIN comments c ON c.post_id = tp.id AND c.deleted_at IS NULL
+		 LEFT JOIN posts shared ON shared.shared_post_id = tp.id AND shared.deleted_at IS NULL
+		 GROUP BY tp.id`,
+		args...,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var postID int64
+		var viewerReaction sql.NullString
+		var likeCount, commentCount, shareCount int64
+		if err := rows.Scan(&postID, &likeCount, &commentCount, &shareCount, &viewerReaction); err != nil {
 			return err
 		}
+		post, ok := postByID[postID]
+		if !ok {
+			continue
+		}
+		post.LikeCount = likeCount
+		post.CommentCount = commentCount
+		post.ShareCount = shareCount
+		post.ViewerReaction = nullableString(viewerReaction)
 	}
-	return nil
+
+	return rows.Err()
 }
 
 type nullableReaction struct {

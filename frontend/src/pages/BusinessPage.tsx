@@ -1584,7 +1584,7 @@ function BusinessTagMultiSelect({
         ))}
       </div>
       {unknownSelected.length ? (
-        <div className="business-tag-legacy" aria-label={`${label} legacy selections`}>
+        <div className="business-tag-custom" aria-label={`${label} custom selections`}>
           {unknownSelected.map((tag) => (
             <button key={tag} type="button" onClick={() => removeUnknown(tag)}>
               {tag}

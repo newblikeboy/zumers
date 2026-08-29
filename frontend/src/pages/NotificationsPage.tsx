@@ -1,5 +1,5 @@
-import { Bell, CalendarCheck, Check, CheckCheck } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Bell, CalendarCheck, Check, CheckCheck, MessageCircle, Settings, Users } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { EmptyState } from '../components/EmptyState'
@@ -10,6 +10,7 @@ import type { NotificationItem } from '../lib/types'
 export function NotificationsPage() {
   const [items, setItems] = useState<NotificationItem[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [filter, setFilter] = useState('All')
 
   async function load() {
     const response = await api.notifications()
@@ -27,58 +28,92 @@ export function NotificationsPage() {
     await load()
   }
 
+  async function markAllRead() {
+    const unread = items.filter((item) => !item.read_at)
+    await Promise.all(unread.map((item) => api.markNotificationRead(item.id)))
+    await load()
+  }
+
   const unreadCount = items.filter((item) => !item.read_at).length
-  const planningItems = items.filter(isPlanningNotification)
-  const socialItems = items.filter((item) => !isPlanningNotification(item))
-  const messageCount = items.filter((item) => item.notification_type === 'message').length
+  const filteredItems = useMemo(
+    () => items.filter((item) => filter === 'All' || notificationBucket(item) === filter),
+    [filter, items],
+  )
+  const groupedItems = groupActivityItems(filteredItems)
+  const attentionItems = items.filter((item) => !item.read_at || isPlanningNotification(item)).slice(0, 5)
+  const filters = ['All', 'Plans', 'Social', 'Messages', 'Offers']
 
   return (
-    <section className="notifications-hub">
-      <header className="section-hero">
-        <div>
-          <span>Activity</span>
-          <h1>Notifications</h1>
-        </div>
-        <div className="metric-strip">
-          <Metric value={items.length} label="Total" />
-          <Metric value={unreadCount} label="Unread" />
-          <Metric value={messageCount} label="Messages" />
-        </div>
-      </header>
-
-      <ErrorBanner message={error} />
-      <section className="panel notification-panel">
-        <div className="panel-title-row">
+    <section className="notifications-hub activity-page">
+      <main className="activity-main">
+        <header className="activity-header">
           <div>
-            <h2>Recent activity</h2>
-            <span>Messages, friends, comments, and shares.</span>
+            <h1>Activity</h1>
           </div>
-          <Bell size={20} />
+          <div className="activity-header-actions">
+            <button className="small-button muted" type="button">
+              <Settings size={16} />
+              <span>Settings</span>
+            </button>
+            <button className="primary-button" disabled={unreadCount === 0} type="button" onClick={markAllRead}>
+              <CheckCheck size={17} />
+              <span>Mark all read</span>
+            </button>
+          </div>
+        </header>
+
+        <div className="activity-filters" role="tablist" aria-label="Activity filters">
+          {filters.map((item) => (
+            <button
+              aria-selected={filter === item}
+              className={filter === item ? 'active' : ''}
+              key={item}
+              role="tab"
+              type="button"
+              onClick={() => setFilter(item)}
+            >
+              {item}
+            </button>
+          ))}
         </div>
-        {items.length === 0 ? (
+
+        <ErrorBanner message={error} />
+        {filteredItems.length === 0 ? (
           <EmptyState
-            actionLabel="Find friends"
+            actionLabel="Open Friends"
             actionTo="/friends"
-            description="New requests, messages, comments, and reactions will appear here."
             icon={<CheckCheck size={24} />}
-            title="No notifications"
+            title={items.length === 0 ? 'No activity yet' : 'No activity for this filter'}
           />
         ) : null}
-        <div className="notification-grouped-list">
-          <NotificationGroup
-            icon={<CalendarCheck size={18} />}
-            items={planningItems}
-            onMarkRead={markRead}
-            title="Planning"
-          />
-          <NotificationGroup
-            icon={<Bell size={18} />}
-            items={socialItems}
-            onMarkRead={markRead}
-            title="Social"
-          />
+
+        <div className="activity-timeline">
+          {groupedItems.map((group) => (
+            <NotificationGroup
+              icon={<CalendarCheck size={18} />}
+              items={group.items}
+              key={group.title}
+              onMarkRead={markRead}
+              title={group.title}
+            />
+          ))}
         </div>
-      </section>
+      </main>
+
+      {attentionItems.length > 0 ? (
+        <aside className="activity-attention-panel">
+          <span>Attention</span>
+          <h2>{attentionItems.length} updates</h2>
+          <div>
+            {attentionItems.map((item) => (
+              <Link key={item.id} to={routeForNotification(item)}>
+                {activityIconFor(item)}
+                <span>{labelForNotification(item.notification_type)}</span>
+              </Link>
+            ))}
+          </div>
+        </aside>
+      ) : null}
     </section>
   )
 }
@@ -106,15 +141,16 @@ function NotificationGroup({
       <div className="notification-list">
         {items.map((item) => (
           <article
-            className={item.read_at ? 'notification read' : 'notification'}
+            className={item.read_at ? 'activity-item read' : 'activity-item'}
             key={item.id}
           >
+            <span className="activity-item-icon">{activityIconFor(item)}</span>
             <div>
               <strong>{labelForNotification(item.notification_type)}</strong>
-              <span>{new Date(item.created_at).toLocaleString()}</span>
+              <small>{new Date(item.created_at).toLocaleString()}</small>
             </div>
             <Link className="notification-route-link" to={routeForNotification(item)}>
-              Open
+              {actionForNotification(item)}
             </Link>
             {!item.read_at ? (
               <button
@@ -133,29 +169,20 @@ function NotificationGroup({
   )
 }
 
-function Metric({ value, label }: { value: number; label: string }) {
-  return (
-    <div>
-      <strong>{value}</strong>
-      <span>{label}</span>
-    </div>
-  )
-}
-
 function labelForNotification(type: string) {
   switch (type) {
     case 'friend_request':
-      return 'New friend request'
+      return 'Friend invite'
     case 'friend_accept':
-      return 'Friend request accepted'
+      return 'Friend invite accepted'
     case 'message':
       return 'New message'
     case 'post_reaction':
-      return 'New post reaction'
+      return 'Someone is interested'
     case 'post_comment':
-      return 'New post comment'
+      return 'New reply on a plan'
     case 'post_share':
-      return 'Post shared'
+      return 'Sent to Feed'
     default:
       return type.replaceAll('_', ' ')
   }
@@ -163,6 +190,46 @@ function labelForNotification(type: string) {
 
 function isPlanningNotification(item: NotificationItem) {
   return ['message', 'post_comment', 'post_share'].includes(item.notification_type)
+}
+
+function notificationBucket(item: NotificationItem) {
+  if (item.notification_type === 'message') return 'Messages'
+  if (item.notification_type === 'friend_request' || item.notification_type === 'friend_accept') return 'Social'
+  if (item.notification_type.startsWith('post_')) return 'Plans'
+  return 'Offers'
+}
+
+function actionForNotification(item: NotificationItem) {
+  if (item.notification_type === 'message') return 'Messages'
+  if (item.notification_type === 'friend_request' || item.notification_type === 'friend_accept') return 'Friends'
+  if (item.notification_type.startsWith('post_')) return 'Feed'
+  return 'Review'
+}
+
+function activityIconFor(item: NotificationItem) {
+  if (item.notification_type === 'message') return <MessageCircle size={17} />
+  if (item.notification_type === 'friend_request' || item.notification_type === 'friend_accept') return <Users size={17} />
+  if (item.notification_type.startsWith('post_')) return <CalendarCheck size={17} />
+  return <Bell size={17} />
+}
+
+function groupActivityItems(items: NotificationItem[]) {
+  const groups = [
+    { title: 'Today', items: [] as NotificationItem[] },
+    { title: 'Yesterday', items: [] as NotificationItem[] },
+    { title: 'Earlier', items: [] as NotificationItem[] },
+  ]
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const yesterday = today - 86400000
+  items.forEach((item) => {
+    const created = new Date(item.created_at)
+    const day = new Date(created.getFullYear(), created.getMonth(), created.getDate()).getTime()
+    if (day === today) groups[0].items.push(item)
+    else if (day === yesterday) groups[1].items.push(item)
+    else groups[2].items.push(item)
+  })
+  return groups.filter((group) => group.items.length > 0)
 }
 
 function routeForNotification(item: NotificationItem) {

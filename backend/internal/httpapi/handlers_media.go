@@ -29,6 +29,15 @@ func (s *Server) handleCloudinarySignUpload(w http.ResponseWriter, r *http.Reque
 	if folder == "" {
 		folder = s.cfg.Cloudinary.UploadFolder
 	}
+	folder = strings.Trim(folder, "/")
+	uploadRoot := strings.Trim(s.cfg.Cloudinary.UploadFolder, "/")
+	if folder == "" {
+		folder = uploadRoot
+	}
+	if !cloudinaryFolderAllowed(folder, uploadRoot) {
+		writeError(w, http.StatusBadRequest, "upload folder is not allowed")
+		return
+	}
 
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	params := map[string]string{
@@ -48,6 +57,13 @@ func (s *Server) handleCloudinarySignUpload(w http.ResponseWriter, r *http.Reque
 		"max_video_bytes":       s.cfg.Cloudinary.MaxVideoBytes,
 		"max_video_seconds":     s.cfg.Cloudinary.MaxVideoSeconds,
 	})
+}
+
+func cloudinaryFolderAllowed(folder string, uploadRoot string) bool {
+	if uploadRoot == "" {
+		return folder != "" && !strings.Contains(folder, "..")
+	}
+	return folder == uploadRoot || (strings.HasPrefix(folder, uploadRoot+"/") && !strings.Contains(folder, ".."))
 }
 
 func cloudinarySignature(params map[string]string, apiSecret string) string {

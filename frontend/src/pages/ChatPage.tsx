@@ -11,7 +11,6 @@ import {
   Plus,
   Search,
   Send,
-  ThumbsDown,
   Users,
   Wifi,
   WifiOff,
@@ -24,6 +23,13 @@ import { Avatar } from '../components/AppLayout'
 import { EmptyState } from '../components/EmptyState'
 import { ErrorBanner } from '../components/ErrorBanner'
 import { api } from '../lib/api'
+import type { MessageHistoryResponse } from '../lib/api'
+import {
+  preloadChatData,
+  readCachedChatConversations,
+  readCachedChatFriends,
+  writeCachedChatConversations,
+} from '../lib/chatDataCache'
 import { cloudinaryDeliveryUrl, uploadToCloudinary } from '../lib/cloudinary'
 import type {
   BusinessShareVoteSummary,
@@ -41,6 +47,12 @@ const wsBaseUrl =
     : 'ws://localhost:8080')
 
 const pendingBusinessShareKey = 'zumers.pendingBusinessShare'
+const messagePageSize = 30
+
+type MessagePageInfo = {
+  hasMore: boolean
+  nextBeforeID?: number
+}
 
 type MessageReceipt = {
   conversation_id: number
@@ -66,14 +78,17 @@ type MessageReceiptItem = {
 
 export function ChatPage() {
   const { accessToken, user } = useAuth()
-  const [conversations, setConversations] = useState<Conversation[]>([])
+  const cachedConversations = readCachedChatConversations(user?.id)
+  const cachedFriends = readCachedChatFriends(user?.id)
+  const [conversations, setConversations] = useState<Conversation[]>(() => cachedConversations ?? [])
   const [active, setActive] = useState<Conversation | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [draft, setDraft] = useState('')
   const [mediaDraft, setMediaDraft] = useState<PostMediaInput | null>(null)
   const [uploadProgress, setUploadProgress] = useState<number | null>(null)
   const [conversationQuery, setConversationQuery] = useState('')
-  const [friends, setFriends] = useState<User[]>([])
+  const [friends, setFriends] = useState<User[]>(() => cachedFriends ?? [])
+  const [chatLoading, setChatLoading] = useState(() => !cachedConversations || !cachedFriends)
   const [groupComposerOpen, setGroupComposerOpen] = useState(false)
   const [groupTitle, setGroupTitle] = useState('')
   const [selectedGroupMemberIDs, setSelectedGroupMemberIDs] = useState<number[]>([])
@@ -82,6 +97,7 @@ export function ChatPage() {
   const [showScrollToLatest, setShowScrollToLatest] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [selectedMessageID, setSelectedMessageID] = useState<number | null>(null)
+  const [olderLoadingConversationID, setOlderLoadingConversationID] = useState<number | null>(null)
   const [pendingBusinessShare, setPendingBusinessShare] = useState<SharedBusinessMessage | null>(null)
   const [shareBusyConversationID, setShareBusyConversationID] = useState<number | null>(null)
   const [shareError, setShareError] = useState<string | null>(null)
@@ -96,22 +112,23 @@ export function ChatPage() {
   )
   const socketRef = useRef<WebSocket | null>(null)
   const activeRef = useRef<Conversation | null>(null)
+  const messageCacheRef = useRef(new Map<number, Message[]>())
+  const messagePageInfoRef = useRef<Record<number, MessagePageInfo>>({})
+  const messageLoadRef = useRef(0)
+  const olderLoadRef = useRef(new Set<number>())
+  const shouldScrollLatestRef = useRef(false)
   const messagesRef = useRef<HTMLDivElement | null>(null)
 
   async function loadConversations() {
     const response = await api.conversations()
     setConversations(response.conversations)
+    writeCachedChatConversations(user?.id, response.conversations)
     setActive((current) => {
       if (current) {
         return response.conversations.find((conversation) => conversation.id === current.id) ?? current
       }
       return isMobileChat ? null : response.conversations[0] ?? null
     })
-  }
-
-  async function loadFriends() {
-    const response = await api.friends()
-    setFriends(response.friends)
   }
 
   useEffect(() => {
@@ -123,10 +140,40 @@ export function ChatPage() {
   }, [])
 
   useEffect(() => {
-    Promise.all([loadConversations(), loadFriends()]).catch((err) =>
-      setError(err instanceof Error ? err.message : 'Could not load chats'),
-    )
-  }, [])
+    if (!user?.id) return
+
+    const cachedChatConversations = readCachedChatConversations(user.id)
+    const cachedChatFriends = readCachedChatFriends(user.id)
+    if (cachedChatConversations) setConversations(cachedChatConversations)
+    if (cachedChatFriends) setFriends(cachedChatFriends)
+    setChatLoading(!cachedChatConversations || !cachedChatFriends)
+
+    let cancelled = false
+    preloadChatData(user.id)
+      .then((data) => {
+        if (cancelled) return
+        setConversations(data.conversations)
+        setFriends(data.friends)
+        setActive((current) => {
+          if (current) {
+            return data.conversations.find((conversation) => conversation.id === current.id) ?? current
+          }
+          return isMobileChat ? null : data.conversations[0] ?? null
+        })
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Could not load chats')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setChatLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isMobileChat, user?.id])
 
   useEffect(() => {
     try {
@@ -157,21 +204,81 @@ export function ChatPage() {
   }, [active?.id])
 
   useEffect(() => {
-    if (!active) return
+    if (!active) {
+      setMessages([])
+      return
+    }
+
+    const conversationID = active.id
+    const loadID = messageLoadRef.current + 1
+    messageLoadRef.current = loadID
+    shouldScrollLatestRef.current = true
+    const cachedMessages = messageCacheRef.current.get(conversationID)
+    setMessages(cachedMessages ?? [])
+    setShowScrollToLatest(false)
+
+    let cancelled = false
+    const controller = new AbortController()
     api
-      .messages(active.id)
-      .then((response) => {
-        setMessages(response.messages.reverse())
-        return api.markConversationRead(active.id)
+      .messages(conversationID, {
+        fast: true,
+        limit: messagePageSize,
+        signal: controller.signal,
       })
-      .catch((err) =>
-        setError(err instanceof Error ? err.message : 'Could not load messages'),
-      )
-  }, [active])
+      .then((response) => {
+        if (cancelled || messageLoadRef.current !== loadID) return
+        const fastMessages = [...response.messages].reverse()
+        updateMessagePageInfo(conversationID, response)
+        setConversationMessages(conversationID, (current) =>
+          mergeMessages(current, fastMessages),
+        )
+        if (activeRef.current?.id === conversationID) {
+          scrollToLatest('auto')
+        }
+        void api.markConversationRead(conversationID).catch(() => undefined)
+
+        void api
+          .messages(conversationID, {
+            limit: messagePageSize,
+            signal: controller.signal,
+          })
+          .then((fullResponse) => {
+            if (cancelled || messageLoadRef.current !== loadID) return
+            const fullMessages = [...fullResponse.messages].reverse()
+            updateMessagePageInfo(conversationID, fullResponse)
+            setConversationMessages(conversationID, (current) =>
+              mergeMessages(current, fullMessages),
+            )
+            const container = messagesRef.current
+            if (activeRef.current?.id === conversationID && container) {
+              const distanceFromBottom =
+                container.scrollHeight - container.scrollTop - container.clientHeight
+              if (distanceFromBottom < 240) {
+                scrollToLatest('auto')
+              }
+            }
+          })
+          .catch(() => undefined)
+      })
+      .catch((err) => {
+        if (cancelled || cachedMessages || isAbortError(err)) return
+        setError(err instanceof Error ? err.message : 'Could not load messages')
+      })
+
+    return () => {
+      cancelled = true
+      controller.abort()
+    }
+  }, [active?.id])
 
   useEffect(() => {
     const container = messagesRef.current
     if (!container) return
+    if (shouldScrollLatestRef.current && messages.length > 0) {
+      shouldScrollLatestRef.current = false
+      scrollToLatest('auto')
+      return
+    }
     const distanceFromBottom =
       container.scrollHeight - container.scrollTop - container.clientHeight
     if (distanceFromBottom < 120 || messages.length <= 1) {
@@ -181,11 +288,20 @@ export function ChatPage() {
     }
   }, [messages, active])
 
-  function scrollToLatest() {
+  function scrollToLatest(behavior?: ScrollBehavior) {
     window.requestAnimationFrame(() => {
       const container = messagesRef.current
       if (container) {
+        const previousScrollBehavior = container.style.scrollBehavior
+        if (behavior) {
+          container.style.scrollBehavior = behavior
+        }
         container.scrollTop = container.scrollHeight
+        if (behavior) {
+          window.requestAnimationFrame(() => {
+            container.style.scrollBehavior = previousScrollBehavior
+          })
+        }
       }
       setShowScrollToLatest(false)
     })
@@ -194,23 +310,122 @@ export function ChatPage() {
   function handleMessagesScroll() {
     const container = messagesRef.current
     if (!container) return
+    if (container.scrollTop < 96) {
+      void loadOlderMessages()
+    }
     const distanceFromBottom =
       container.scrollHeight - container.scrollTop - container.clientHeight
     setShowScrollToLatest(distanceFromBottom > 160)
   }
 
+  function updateMessagePageInfo(conversationID: number, response: MessageHistoryResponse) {
+    messagePageInfoRef.current = {
+      ...messagePageInfoRef.current,
+      [conversationID]: {
+        hasMore: response.has_more,
+        nextBeforeID: response.next_before_id ?? undefined,
+      },
+    }
+  }
+
+  function setConversationMessages(
+    conversationID: number,
+    updater: (current: Message[]) => Message[],
+  ) {
+    if (activeRef.current?.id === conversationID) {
+      setMessages((current) => {
+        const next = updater(messageCacheRef.current.get(conversationID) ?? current)
+        messageCacheRef.current.set(conversationID, next)
+        return next
+      })
+      return
+    }
+
+    const next = updater(messageCacheRef.current.get(conversationID) ?? [])
+    messageCacheRef.current.set(conversationID, next)
+  }
+
+  function restoreConversationMessages(conversationID: number, messagesToRestore: Message[]) {
+    messageCacheRef.current.set(conversationID, messagesToRestore)
+    if (activeRef.current?.id === conversationID) {
+      setMessages(messagesToRestore)
+    }
+  }
+
+  async function loadOlderMessages() {
+    const conversation = activeRef.current
+    if (!conversation) return
+
+    const conversationID = conversation.id
+    const pageInfo = messagePageInfoRef.current[conversationID]
+    if (pageInfo?.hasMore === false || olderLoadRef.current.has(conversationID)) return
+
+    const cachedMessages = messageCacheRef.current.get(conversationID) ?? messages
+    const beforeID = pageInfo?.nextBeforeID ?? cachedMessages[0]?.id
+    if (!beforeID) return
+
+    const container = messagesRef.current
+    const previousScrollHeight = container?.scrollHeight ?? 0
+    const previousScrollTop = container?.scrollTop ?? 0
+
+    olderLoadRef.current.add(conversationID)
+    setOlderLoadingConversationID(conversationID)
+    try {
+      const response = await api.messages(conversationID, {
+        beforeId: beforeID,
+        limit: messagePageSize,
+      })
+      const olderMessages = [...response.messages].reverse()
+      updateMessagePageInfo(conversationID, response)
+      setConversationMessages(conversationID, (current) =>
+        mergeMessages(current, olderMessages),
+      )
+      window.requestAnimationFrame(() => {
+        if (activeRef.current?.id !== conversationID) return
+        const latestContainer = messagesRef.current
+        if (!latestContainer) return
+        const previousScrollBehavior = latestContainer.style.scrollBehavior
+        latestContainer.style.scrollBehavior = 'auto'
+        latestContainer.scrollTop =
+          latestContainer.scrollHeight - previousScrollHeight + previousScrollTop
+        window.requestAnimationFrame(() => {
+          latestContainer.style.scrollBehavior = previousScrollBehavior
+        })
+      })
+    } catch (err) {
+      if (activeRef.current?.id === conversationID) {
+        setError(err instanceof Error ? err.message : 'Could not load older messages')
+      }
+    } finally {
+      olderLoadRef.current.delete(conversationID)
+      setOlderLoadingConversationID((current) =>
+        current === conversationID ? null : current,
+      )
+    }
+  }
+
   useEffect(() => {
     if (!accessToken) return
-    const token = accessToken
     const currentUserID = user?.id
     let stopped = false
     let retry: number | undefined
 
-    function connect() {
+    async function connect() {
       setRealtimeStatus('Connecting')
-      const ws = new WebSocket(
-        `${wsBaseUrl}/ws/chat?access_token=${encodeURIComponent(token)}`,
-      )
+      let ticket: string
+      try {
+        const response = await api.chatTicket()
+        ticket = response.ticket
+      } catch {
+        if (!stopped) {
+          setRealtimeStatus('Reconnecting')
+          retry = window.setTimeout(connect, 2000)
+        }
+        return
+      }
+      if (stopped) return
+
+      const ws = new WebSocket(`${wsBaseUrl}/ws/chat?ticket=${encodeURIComponent(ticket)}`)
       socketRef.current = ws
 
       ws.onopen = () => {
@@ -220,12 +435,12 @@ export function ChatPage() {
         const payload = JSON.parse(event.data)
         if (payload.type === 'message.created') {
           const message = payload.data as Message
+          setConversationMessages(message.conversation_id, (current) =>
+            current.some((item) => item.id === message.id)
+              ? current
+              : [...current, message],
+          )
           if (activeRef.current?.id === message.conversation_id) {
-            setMessages((current) =>
-              current.some((item) => item.id === message.id)
-                ? current
-                : [...current, message],
-            )
             if (message.sender_id !== currentUserID) {
               ws.send(
                 JSON.stringify({
@@ -273,7 +488,7 @@ export function ChatPage() {
     const receiptByMessageID = new Map(
       (receipt.messages ?? []).map((item) => [item.message_id, item]),
     )
-    setMessages((current) =>
+    setConversationMessages(receipt.conversation_id, (current) =>
       current.map((message) => {
         if (message.conversation_id !== receipt.conversation_id) return message
         if (
@@ -345,7 +560,7 @@ export function ChatPage() {
         media_url: mediaDraft.secure_url,
         media_public_id: mediaDraft.cloudinary_public_id,
       })
-      setMessages((current) =>
+      setConversationMessages(active.id, (current) =>
         current.some((item) => item.id === message.id) ? current : [...current, message],
       )
       setMediaDraft(null)
@@ -369,7 +584,7 @@ export function ChatPage() {
       message_type: 'text',
       content,
     })
-    setMessages((current) => [...current, message])
+    setConversationMessages(active.id, (current) => [...current, message])
   }
 
   async function shareBusinessToConversation(conversation: Conversation) {
@@ -385,11 +600,9 @@ export function ChatPage() {
       setPendingBusinessShare(null)
       setActive(conversation)
       setMobileChatView('thread')
-      if (activeRef.current?.id === conversation.id) {
-        setMessages((current) =>
-          current.some((item) => item.id === message.id) ? current : [...current, message],
-        )
-      }
+      setConversationMessages(conversation.id, (current) =>
+        current.some((item) => item.id === message.id) ? current : [...current, message],
+      )
       await loadConversations()
     } catch (err) {
       setShareError(err instanceof Error ? err.message : 'Could not share business')
@@ -398,30 +611,38 @@ export function ChatPage() {
     }
   }
 
-  async function voteBusinessShare(messageID: number, vote: 'like' | 'dislike') {
+  async function voteBusinessShare(messageID: number) {
     if (!active) return
-    let previousMessages: Message[] = []
-    setMessages((current) => {
-      previousMessages = current
-      return current.map((message) => {
+    const conversationID = active.id
+    const previousMessages = messageCacheRef.current.get(conversationID) ?? messages
+    setConversationMessages(conversationID, (current) =>
+      current.map((message) => {
         if (message.id !== messageID) return message
         return {
           ...message,
-          business_vote: optimisticBusinessVoteSummary(message, vote, active),
+          business_vote: optimisticBusinessVoteSummary(message, active),
         }
       })
-    })
+    )
     try {
-      const summary = await api.voteBusinessShare(messageID, vote)
+      const summary = await api.voteBusinessShare(messageID, 'like')
       applyBusinessVoteSummary(summary)
     } catch (err) {
-      setMessages(previousMessages)
+      restoreConversationMessages(conversationID, previousMessages)
       setError(err instanceof Error ? err.message : 'Could not save vote')
     }
   }
 
   function applyBusinessVoteSummary(summary: BusinessShareVoteSummary) {
-    setMessages((current) =>
+    let conversationID = activeRef.current?.id
+    for (const [cachedConversationID, cachedMessages] of messageCacheRef.current) {
+      if (cachedMessages.some((message) => message.id === summary.message_id)) {
+        conversationID = cachedConversationID
+        break
+      }
+    }
+    if (!conversationID) return
+    setConversationMessages(conversationID, (current) =>
       current.map((message) => {
         if (message.id !== summary.message_id) return message
         return {
@@ -437,39 +658,34 @@ export function ChatPage() {
 
   function optimisticBusinessVoteSummary(
     message: Message,
-    vote: 'like' | 'dislike',
     conversation: Conversation,
   ): BusinessShareVoteSummary {
     const current = message.business_vote
     const previousVote = current?.my_vote
     const participantCount = current?.participant_count ?? conversation.member_count
     let likeCount = current?.like_count ?? 0
-    let dislikeCount = current?.dislike_count ?? 0
 
-    if (previousVote === vote) {
+    if (previousVote === 'like') {
       return {
         message_id: message.id,
         like_count: likeCount,
-        dislike_count: dislikeCount,
+        dislike_count: current?.dislike_count ?? 0,
         participant_count: participantCount,
-        my_vote: vote,
+        my_vote: 'like',
         all_liked: participantCount > 0 && likeCount === participantCount,
         recommendation_text: current?.recommendation_text,
       }
     }
 
-    if (previousVote === 'like') likeCount = Math.max(0, likeCount - 1)
-    if (previousVote === 'dislike') dislikeCount = Math.max(0, dislikeCount - 1)
-    if (vote === 'like') likeCount += 1
-    if (vote === 'dislike') dislikeCount += 1
+    likeCount += 1
 
     const allLiked = participantCount > 0 && likeCount === participantCount
     return {
       message_id: message.id,
       like_count: likeCount,
-      dislike_count: dislikeCount,
+      dislike_count: current?.dislike_count ?? 0,
       participant_count: participantCount,
-      my_vote: vote,
+      my_vote: 'like',
       all_liked: allLiked,
       recommendation_text: allLiked
         ? conversation.conversation_type === 'group'
@@ -531,6 +747,41 @@ export function ChatPage() {
     () => messages.find((message) => message.id === selectedMessageID) ?? null,
     [messages, selectedMessageID],
   )
+
+  useEffect(() => {
+    if (!detailsOpen || !selectedMessage || selectedMessage.receipts?.length) {
+      return
+    }
+
+    const messageID = selectedMessage.id
+    const conversationID = selectedMessage.conversation_id
+    let cancelled = false
+    api
+      .messageReceipts(messageID)
+      .then((response) => {
+        if (cancelled) return
+        setConversationMessages(conversationID, (current) =>
+          current.map((message) => {
+            if (message.id !== messageID) return message
+            return {
+              ...message,
+              recipient_count: response.summary.recipient_count,
+              delivered_count: response.summary.delivered_count,
+              read_count: response.summary.read_count,
+              delivered_at: response.summary.delivered_at ?? message.delivered_at,
+              read_at: response.summary.read_at ?? message.read_at,
+              receipts: response.receipts,
+            }
+          }),
+        )
+      })
+      .catch(() => undefined)
+
+    return () => {
+      cancelled = true
+    }
+  }, [detailsOpen, selectedMessage])
+
   return (
     <section
       className={
@@ -542,8 +793,7 @@ export function ChatPage() {
       <aside className="conversation-list">
         <div className="chat-list-header">
           <div>
-            <span>Messaging</span>
-            <h2>Chats</h2>
+            <h2>Messages</h2>
           </div>
           <div className="chat-list-actions">
             <button
@@ -602,7 +852,7 @@ export function ChatPage() {
           <form className="group-composer" onSubmit={createGroup}>
             <div className="group-composer-heading">
               <Users size={18} />
-              <strong>New group</strong>
+              <strong>New circle conversation</strong>
               <button
                 aria-label="Close group composer"
                 className="icon-button quiet"
@@ -614,7 +864,7 @@ export function ChatPage() {
             </div>
             <input
               maxLength={120}
-              placeholder="Group name"
+              placeholder="Circle name"
               value={groupTitle}
               onChange={(event) => setGroupTitle(event.target.value)}
             />
@@ -640,20 +890,23 @@ export function ChatPage() {
               type="submit"
             >
               <Users size={17} />
-              <span>{groupBusy ? 'Creating' : 'Create group'}</span>
+              <span>{groupBusy ? 'Creating' : 'Create circle'}</span>
             </button>
           </form>
         ) : null}
         <label className="conversation-search">
           <Search size={17} />
           <input
-            placeholder="Search chats"
+            placeholder="Search"
             value={conversationQuery}
             onChange={(event) => setConversationQuery(event.target.value)}
           />
         </label>
-        {filteredConversations.length === 0 ? (
-          <EmptyState title="Start chat from Friends" />
+        {chatLoading ? (
+          <div className="chat-dock-state">Loading chats</div>
+        ) : null}
+        {!chatLoading && filteredConversations.length === 0 ? (
+          <EmptyState title="Start from Friends" />
         ) : null}
         <div className="conversation-stack">
           {filteredConversations.map((conversation) => (
@@ -696,20 +949,21 @@ export function ChatPage() {
               />
               <div>
                 <h2>{conversationDisplayName(active)}</h2>
-                <span>{conversationSubtitle(active)}</span>
               </div>
-              <button
-                aria-label="Conversation details"
-                className="icon-button quiet"
-                title="Conversation details"
-                type="button"
-                onClick={() => {
-                  setSelectedMessageID(null)
-                  setDetailsOpen(true)
-                }}
-              >
-                <Info size={19} />
-              </button>
+              <div className="chat-header-actions">
+                <button
+                  aria-label="Conversation details"
+                  className="icon-button quiet"
+                  title="Conversation details"
+                  type="button"
+                  onClick={() => {
+                    setSelectedMessageID(null)
+                    setDetailsOpen(true)
+                  }}
+                >
+                  <Info size={19} />
+                </button>
+              </div>
             </header>
 
             <div className="messages-wrap">
@@ -718,6 +972,9 @@ export function ChatPage() {
                 ref={messagesRef}
                 onScroll={handleMessagesScroll}
               >
+                {olderLoadingConversationID === active.id ? (
+                  <div className="older-messages-loader">Loading older messages</div>
+                ) : null}
                 {messages.map((message) => (
                   <MessageBubble
                     key={message.id}
@@ -739,7 +996,7 @@ export function ChatPage() {
                 <button
                   className="scroll-latest-button"
                   title="Jump to latest message"
-                  onClick={scrollToLatest}
+                  onClick={() => scrollToLatest()}
                 >
                   <ChevronDown size={19} />
                 </button>
@@ -855,8 +1112,8 @@ function conversationSubtitle(conversation: Conversation) {
   }
 
   return conversation.other_user
-    ? `@${conversation.other_user.username} - friend conversation`
-    : 'Friend conversation'
+    ? `@${conversation.other_user.username}`
+    : ''
 }
 
 function messagePreview(message?: Message) {
@@ -881,12 +1138,41 @@ function parseSharedBusinessMessage(content?: string): SharedBusinessMessage | n
   }
 }
 
+function mergeMessages(current: Message[], incoming: Message[]) {
+  if (current.length === 0) return incoming
+  const byID = new Map(current.map((message) => [message.id, message]))
+  for (const message of incoming) {
+    const existing = byID.get(message.id)
+    byID.set(message.id, existing ? mergeMessage(existing, message) : message)
+  }
+  return Array.from(byID.values()).sort(
+    (left, right) =>
+      new Date(left.created_at).getTime() - new Date(right.created_at).getTime(),
+  )
+}
+
+function mergeMessage(current: Message, incoming: Message): Message {
+  return {
+    ...current,
+    ...incoming,
+    receipts: incoming.receipts ?? current.receipts,
+    business_vote: incoming.business_vote ?? current.business_vote,
+  }
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === 'AbortError'
+}
+
 function RealtimeBadge({ status }: { status: 'Connecting' | 'Live' | 'Reconnecting' }) {
   const online = status === 'Live'
   return (
-    <span className={online ? 'realtime-badge live' : 'realtime-badge'}>
+    <span
+      aria-label={status}
+      className={online ? 'realtime-badge live' : 'realtime-badge'}
+      title={status}
+    >
       {online ? <Wifi size={14} /> : <WifiOff size={14} />}
-      {status}
     </span>
   )
 }
@@ -904,7 +1190,7 @@ function MessageBubble({
   conversation: Conversation
   message: Message
   mine: boolean
-  onVote: (messageID: number, vote: 'like' | 'dislike') => void
+  onVote: (messageID: number) => void
   sender?: User
   showSender: boolean
   receipt?: 'sent' | 'delivered' | 'read'
@@ -937,9 +1223,9 @@ function MessageBubble({
         {message.media_url && !sharedBusiness ? (
           <div className="message-media">
             {message.message_type === 'video' ? (
-              <video controls playsInline src={message.media_url} />
+              <video controls playsInline preload="metadata" src={message.media_url} />
             ) : (
-              <img src={message.media_url} alt="" />
+              <img src={message.media_url} alt="" loading="lazy" decoding="async" />
             )}
           </div>
         ) : null}
@@ -968,7 +1254,7 @@ function BusinessShareMessageCard({
   business: SharedBusinessMessage
   conversation: Conversation
   message: Message
-  onVote: (messageID: number, vote: 'like' | 'dislike') => void
+  onVote: (messageID: number) => void
 }) {
   const vote = message.business_vote
   const acceptedText = vote?.recommendation_text
@@ -979,7 +1265,9 @@ function BusinessShareMessageCard({
 
   return (
     <div className="shared-business-card">
-      {business.image_url ? <img src={business.image_url} alt="" /> : null}
+      {business.image_url ? (
+        <img src={business.image_url} alt="" loading="lazy" decoding="async" />
+      ) : null}
       <div className="shared-business-content">
         <span className="shared-business-type">{business.subcategory ?? business.category}</span>
         <h3>{business.title}</h3>
@@ -999,18 +1287,10 @@ function BusinessShareMessageCard({
           <button
             type="button"
             className={vote?.my_vote === 'like' ? 'active' : ''}
-            onClick={() => onVote(message.id, 'like')}
+            onClick={() => onVote(message.id)}
           >
             <Heart size={17} fill={vote?.my_vote === 'like' ? 'currentColor' : 'none'} />
             <span>{vote?.like_count ?? 0}</span>
-          </button>
-          <button
-            type="button"
-            className={vote?.my_vote === 'dislike' ? 'active dislike' : 'dislike'}
-            onClick={() => onVote(message.id, 'dislike')}
-          >
-            <ThumbsDown size={17} />
-            <span>{vote?.dislike_count ?? 0}</span>
           </button>
           <small>{participantLabel}</small>
         </div>
