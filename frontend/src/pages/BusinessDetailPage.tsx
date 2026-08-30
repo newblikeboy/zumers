@@ -330,7 +330,7 @@ export function BusinessDetailPage() {
         </div>
 
         <nav className="business-detail-tabs" aria-label="Business detail sections">
-          <a href="#business-offers">Offers</a>
+          {activeOffers.length ? <a href="#business-offers">Offers</a> : null}
           <a href="#business-menu">Menu</a>
           <a href="#business-reviews">Reviews</a>
           <a href="#business-facilities">Facilities</a>
@@ -342,9 +342,9 @@ export function BusinessDetailPage() {
 
       <div className="business-detail-layout">
         <main className="business-detail-main">
-          <section className="business-detail-card" id="business-offers">
-            <SectionHeading title="Offers for today" subtitle={business.open_now ? 'Available now' : 'Check timing before booking'} />
-            {activeOffers.length ? (
+          {activeOffers.length ? (
+            <section className="business-detail-card" id="business-offers">
+              <SectionHeading title="Offers for today" subtitle={business.open_now ? 'Available now' : 'Check timing before booking'} />
               <div className="business-offer-list">
                 {activeOffers.map((offer) => (
                   <article className="business-offer-card" key={offer.id}>
@@ -359,29 +359,29 @@ export function BusinessDetailPage() {
                   </article>
                 ))}
               </div>
-            ) : (
-              <p className="business-detail-muted">No active offers right now.</p>
-            )}
-          </section>
+            </section>
+          ) : null}
 
-          <section className="business-detail-card business-bill-card">
-            <SectionHeading title="Sample bill" />
-            <div className="sample-bill">
-              <div>
-                <span>Estimated bill for 2 guests</span>
-                <strong>{currency(bill.original)}</strong>
+          {primaryOffer ? (
+            <section className="business-detail-card business-bill-card">
+              <SectionHeading title="Sample bill" />
+              <div className="sample-bill">
+                <div>
+                  <span>Estimated bill for 2 guests</span>
+                  <strong>{currency(bill.original)}</strong>
+                </div>
+                <div>
+                  <span>You pay</span>
+                  <strong>{currency(bill.final)}</strong>
+                </div>
+                <div>
+                  <span>Save up to</span>
+                  <strong>{currency(bill.saving)}</strong>
+                </div>
+                <button type="button">Calculate savings on any bill amount</button>
               </div>
-              <div>
-                <span>You pay</span>
-                <strong>{currency(bill.final)}</strong>
-              </div>
-              <div>
-                <span>Save up to</span>
-                <strong>{currency(bill.saving)}</strong>
-              </div>
-              <button type="button">Calculate savings on any bill amount</button>
-            </div>
-          </section>
+            </section>
+          ) : null}
 
           <section className="business-detail-card" id="business-menu">
             <SectionHeading title="Menu" subtitle="Updated recently" />

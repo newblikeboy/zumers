@@ -569,8 +569,7 @@ func (s *Server) handleBusinessDetail(w http.ResponseWriter, r *http.Request) {
 	offers, err := s.getBusinessOffers(r.Context(), businessID)
 	if err != nil {
 		s.logger.Error("business detail load failed", "business_id", businessID, "stage", "offers", "error", err)
-		writeError(w, http.StatusInternalServerError, "could not load business offers")
-		return
+		offers = []businessOffer{}
 	}
 	events, err := s.getBusinessEvents(r.Context(), businessID)
 	if err != nil {

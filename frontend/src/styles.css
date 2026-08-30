@@ -16531,3 +16531,27 @@ body {
   }
 }
 
+@media (max-width: 760px) {
+  body.chat-thread-open .app-frame.chat-page-shell {
+    height: var(--chat-visual-viewport-height, 100dvh);
+    min-height: 0;
+  }
+
+  body.chat-thread-open .app-frame.chat-page-shell .main-area {
+    height: calc(var(--chat-visual-viewport-height, 100dvh) - var(--topbar-height));
+    min-height: 0;
+    padding: 0;
+  }
+
+  body.chat-thread-open .app-frame.chat-page-shell .messenger-shell,
+  body.chat-thread-open .messenger-shell.mobile-thread-open,
+  body.chat-thread-open .messenger-shell.mobile-thread-open .message-panel {
+    height: 100%;
+    min-height: 0;
+  }
+
+  body.chat-thread-open.chat-keyboard-open .message-form {
+    padding-bottom: 6px;
+  }
+}
+

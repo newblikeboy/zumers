@@ -236,6 +236,44 @@ export function ChatPage() {
   }, [active, isMobileChat, mobileChatView])
 
   useEffect(() => {
+    const root = document.documentElement
+    const keyboardClassName = 'chat-keyboard-open'
+    const shouldTrackViewport = isMobileChat && mobileChatView === 'thread' && Boolean(active)
+
+    if (!shouldTrackViewport) {
+      root.style.removeProperty('--chat-visual-viewport-height')
+      document.body.classList.remove(keyboardClassName)
+      return undefined
+    }
+
+    const viewport = window.visualViewport
+    const updateViewport = () => {
+      const visualHeight = viewport?.height ?? window.innerHeight
+      const keyboardOffset = viewport
+        ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+        : 0
+
+      root.style.setProperty('--chat-visual-viewport-height', `${Math.round(visualHeight)}px`)
+      document.body.classList.toggle(keyboardClassName, keyboardOffset > 80)
+    }
+
+    updateViewport()
+    viewport?.addEventListener('resize', updateViewport)
+    viewport?.addEventListener('scroll', updateViewport)
+    window.addEventListener('resize', updateViewport)
+    window.addEventListener('orientationchange', updateViewport)
+
+    return () => {
+      viewport?.removeEventListener('resize', updateViewport)
+      viewport?.removeEventListener('scroll', updateViewport)
+      window.removeEventListener('resize', updateViewport)
+      window.removeEventListener('orientationchange', updateViewport)
+      root.style.removeProperty('--chat-visual-viewport-height')
+      document.body.classList.remove(keyboardClassName)
+    }
+  }, [active, isMobileChat, mobileChatView])
+
+  useEffect(() => {
     return () => {
       if (readMarkTimeoutRef.current) {
         window.clearTimeout(readMarkTimeoutRef.current)
