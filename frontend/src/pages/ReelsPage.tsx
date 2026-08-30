@@ -443,9 +443,15 @@ export function ReelsPage() {
 
               <div className="reel-topbar">
                 <button
+                  aria-label={muted ? 'Turn sound on' : 'Turn sound off'}
+                  aria-pressed={!muted}
                   className="reel-icon-button"
+                  type="button"
                   title={muted ? 'Unmute' : 'Mute'}
-                  onClick={() => setMuted((value) => !value)}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setMuted((value) => !value)
+                  }}
                 >
                   {muted ? <VolumeX size={19} /> : <Volume2 size={19} />}
                 </button>

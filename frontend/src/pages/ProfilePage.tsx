@@ -2,6 +2,7 @@ import {
   CalendarCheck,
   Camera,
   ChevronDown,
+  LogOut,
   MapPin,
   MessageCircle,
   Pencil,
@@ -21,7 +22,7 @@ import type { Post } from '../lib/types'
 
 export function ProfilePage() {
   const navigate = useNavigate()
-  const { user, setUser } = useAuth()
+  const { user, logout, setUser } = useAuth()
   const [posts, setPosts] = useState<Post[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -158,8 +159,12 @@ export function ProfilePage() {
               <MessageCircle size={18} />
               <span>Share update</span>
             </button>
-            <button className="secondary-button icon-only" type="button" aria-label="More profile actions">
+            <button className="secondary-button icon-only profile-more-action" type="button" aria-label="More profile actions">
               <ChevronDown size={20} />
+            </button>
+            <button className="secondary-button profile-logout-action" type="button" onClick={logout}>
+              <LogOut size={18} />
+              <span>Logout</span>
             </button>
           </div>
         </div>

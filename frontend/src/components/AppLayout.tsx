@@ -4,34 +4,49 @@ import {
   Bell,
   Bookmark,
   CalendarCheck,
+  Car,
   Check,
   ChevronDown,
   Clapperboard,
+  CircleDot,
   Coffee,
   Compass,
+  Croissant,
+  Disc3,
+  Drama,
   Dumbbell,
-  Flame,
   Heart,
+  HeartHandshake,
   LogOut,
   MapPin,
+  MapPinned,
   MessageCircle,
+  Mic2,
   MoreHorizontal,
   Mountain,
+  Music2,
   Newspaper,
+  PartyPopper,
   Search,
   Share2,
   ShoppingBag,
+  Soup,
   Sparkles,
   Star,
   Tags,
+  TentTree,
   Ticket,
+  Trees,
+  Trophy,
   Utensils,
   User as UserIcon,
   Users,
+  UsersRound,
+  Waypoints,
   X,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { FormEvent, MouseEvent } from 'react'
+import type { FormEvent, KeyboardEvent, MouseEvent } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { api } from '../lib/api'
@@ -63,80 +78,158 @@ const mobileNavItems = [
 
 const discoveryServices = [
   {
-    label: 'Dining Plans',
-    icon: Utensils,
-    query: 'restaurant cafe dinner nearby',
-    chips: ['Restaurant or cafe', 'dinner'],
+    label: 'Date Night',
+    icon: HeartHandshake,
+    query: 'romantic date night dinner rooftop cafe nearby',
+    chips: ['Restaurant or cafe', 'couples', 'dinner'],
   },
   {
-    label: 'Street Bites',
-    icon: Flame,
-    query: 'street food momos chaat nearby',
+    label: 'Sufi Night',
+    icon: Music2,
+    query: 'sufi night live music lounge dinner nearby',
+    chips: ['Nightlife', 'Culture and events', 'live-music'],
+  },
+  {
+    label: 'DJ Night',
+    icon: Disc3,
+    query: 'dj night club pub late night nearby',
+    chips: ['Nightlife', 'dj-night', 'late-night'],
+  },
+  {
+    label: 'Live Music',
+    icon: Mic2,
+    query: 'live music cafe pub concert nearby',
+    chips: ['Nightlife', 'Culture and events', 'live-music'],
+  },
+  {
+    label: 'Stand-Up Comedy',
+    icon: Mic2,
+    query: 'stand-up comedy open mic show nearby',
+    chips: ['Culture and events', 'stand-up-comedy'],
+  },
+  {
+    label: 'Rooftop Dining',
+    icon: Utensils,
+    query: 'rooftop dining restaurant dinner nearby',
+    chips: ['Restaurant or cafe', 'rooftop-cafe', 'dinner'],
+  },
+  {
+    label: 'Street Food Trail',
+    icon: Soup,
+    query: 'street food trail momos chaat quick bites nearby',
     chips: ['Street food', 'quick-bite'],
   },
   {
-    label: 'Events',
-    icon: Ticket,
-    query: 'events concerts workshops theatre nearby',
-    chips: ['Culture and events'],
-  },
-  {
-    label: 'Fun Zones',
-    icon: Clapperboard,
-    query: 'bowling arcade gaming karaoke escape room',
-    chips: ['Fun and entertainment'],
-  },
-  {
-    label: 'Adventure',
-    icon: Mountain,
-    query: 'adventure go kart paintball trampoline nearby',
-    chips: ['Adventure'],
-  },
-  {
-    label: 'Nightlife',
-    icon: Sparkles,
-    query: 'nightlife pub bar dj late night',
-    chips: ['Nightlife', 'late-night'],
-  },
-  {
-    label: 'Sports',
-    icon: Dumbbell,
-    query: 'sports turf badminton football swimming',
-    chips: ['Sports and fitness'],
-  },
-  {
-    label: 'Wellness',
-    icon: Heart,
-    query: 'spa salon wellness self care nearby',
-    chips: ['Wellness and self care'],
-  },
-  {
-    label: 'Shopping',
-    icon: ShoppingBag,
-    query: 'shopping market mall flea books nearby',
-    chips: ['Shopping and markets'],
-  },
-  {
-    label: 'Day Trips',
-    icon: Compass,
-    query: 'travel trip tour local guide nearby',
-    chips: ['Travel or transport'],
-  },
-  {
-    label: 'Heritage',
-    icon: CalendarCheck,
-    query: 'heritage monument temple museum photo spot',
-    chips: ['Attractions and heritage'],
-  },
-  {
-    label: 'Learn',
+    label: 'Café Hopping',
     icon: Coffee,
-    query: 'art dance music cooking pottery class',
-    chips: ['Learning and hobbies'],
+    query: 'cafe hopping coffee bakery snacks nearby',
+    chips: ['Restaurant or cafe', 'cafe', 'coffee'],
+  },
+  {
+    label: 'Sunday Brunch',
+    icon: Croissant,
+    query: 'sunday brunch cafe restaurant breakfast nearby',
+    chips: ['Restaurant or cafe', 'breakfast'],
+  },
+  {
+    label: 'Match Screening',
+    icon: Trophy,
+    query: 'match screening live sports restaurant pub nearby',
+    chips: ['Sports and fitness', 'Nightlife'],
+  },
+  {
+    label: 'Dance Socials',
+    icon: PartyPopper,
+    query: 'dance socials dance class music night nearby',
+    chips: ['Learning and hobbies', 'dance-class', 'Nightlife'],
+  },
+  {
+    label: 'Theatre & Drama',
+    icon: Drama,
+    query: 'theatre drama play show nearby',
+    chips: ['Culture and events', 'theatre'],
+  },
+  {
+    label: 'Bowling',
+    icon: CircleDot,
+    query: 'bowling alley friends nearby',
+    chips: ['Fun and entertainment', 'bowling', 'friends'],
+  },
+  {
+    label: 'Go-Karting',
+    icon: Car,
+    query: 'go karting adventure friends nearby',
+    chips: ['Adventure', 'go-karting', 'friends'],
+  },
+  {
+    label: 'Escape Room',
+    icon: UsersRound,
+    query: 'escape room activity friends nearby',
+    chips: ['Fun and entertainment', 'escape-room', 'friends'],
+  },
+  {
+    label: 'Box Cricket',
+    icon: Trophy,
+    query: 'box cricket turf sports friends nearby',
+    chips: ['Sports and fitness', 'cricket-turf', 'friends'],
+  },
+  {
+    label: 'Trampoline Park',
+    icon: Dumbbell,
+    query: 'trampoline park fun activity nearby',
+    chips: ['Adventure', 'trampoline-park'],
+  },
+  {
+    label: 'Sunset Picnic',
+    icon: Trees,
+    query: 'sunset picnic park garden lake nearby',
+    chips: ['Relax and explore', 'park', 'picnic-spot'],
+  },
+  {
+    label: 'Heritage Walk',
+    icon: MapPinned,
+    query: 'heritage walk monument old city nearby',
+    chips: ['Attractions and heritage', 'heritage-walk'],
+  },
+  {
+    label: 'Adventure Trek',
+    icon: Mountain,
+    query: 'adventure trek trekking nearby',
+    chips: ['Adventure', 'trekking'],
+  },
+  {
+    label: 'Camping & Bonfire',
+    icon: TentTree,
+    query: 'camping bonfire weekend nature nearby',
+    chips: ['Adventure', 'camping'],
+  },
+  {
+    label: 'Long Drive',
+    icon: Compass,
+    query: 'long drive scenic route day trip nearby',
+    chips: ['Travel or transport', 'weekend-trip'],
+  },
+  {
+    label: 'Day Trip',
+    icon: Compass,
+    query: 'day trip tour local ride nearby',
+    chips: ['Travel or transport', 'city-tour'],
+  },
+  {
+    label: 'Weekend Getaway',
+    icon: Compass,
+    query: 'weekend getaway resort trip nearby',
+    chips: ['Travel or transport', 'weekend-trip'],
+  },
+  {
+    label: 'Spa Day',
+    icon: Heart,
+    query: 'spa day wellness massage salon nearby',
+    chips: ['Wellness and self care', 'spa', 'massage'],
   },
 ]
 
-const discoveryRailDotIndexes = [0, 1, 2]
+const discoveryRailDotIndexes = [0, 1, 2, 3]
 
 const discoveryRecentSearchesKey = 'zumers.discoveryRecentSearches'
 const discoverySavedBusinessesKey = 'zumers.discoverySavedBusinesses'
@@ -145,10 +238,10 @@ const pendingBusinessShareKey = 'zumers.pendingBusinessShare'
 const pendingLandingSearchKey = 'zumers.pendingLandingSearch'
 const discoveryLocationCacheMaxAgeMs = 6 * 60 * 60 * 1000
 const discoveryFallbackSearches = [
-  'street food under 500',
-  'bowling for 4 friends',
-  'date cafe tonight',
-  'events today nearby',
+  'date night under 1000',
+  'sufi night nearby',
+  'rooftop dining tonight',
+  'stand-up comedy this weekend',
 ]
 
 const popularLocationOptions = [
@@ -209,6 +302,57 @@ type DiscoveryCachedLocation = {
   primary?: string
   secondary?: string
   savedAt: number
+}
+
+type NotificationBundle = {
+  fetchedAt: number
+  friendRequests: FriendRequest[]
+  notifications: NotificationItem[]
+}
+
+const notificationCacheMaxAgeMs = 30 * 1000
+let notificationBundleCache: NotificationBundle | null = null
+let notificationBundleRequest: Promise<NotificationBundle> | null = null
+
+function cacheNotificationBundle(bundle: Omit<NotificationBundle, 'fetchedAt'>) {
+  notificationBundleCache = {
+    ...bundle,
+    fetchedAt: Date.now(),
+  }
+  return notificationBundleCache
+}
+
+function readNotificationBundleCache() {
+  return notificationBundleCache
+}
+
+function updateNotificationBundleCache(updater: (bundle: NotificationBundle) => NotificationBundle) {
+  if (!notificationBundleCache) return null
+  notificationBundleCache = updater(notificationBundleCache)
+  return notificationBundleCache
+}
+
+function fetchNotificationBundle(force = false) {
+  const cached = readNotificationBundleCache()
+  if (!force && cached && Date.now() - cached.fetchedAt <= notificationCacheMaxAgeMs) {
+    return Promise.resolve(cached)
+  }
+  if (!force && notificationBundleRequest) return notificationBundleRequest
+
+  notificationBundleRequest = Promise.all([
+    api.notifications(),
+    api.friendRequests(),
+  ])
+    .then(([notificationResponse, requestResponse]) =>
+      cacheNotificationBundle({
+        notifications: notificationResponse.notifications,
+        friendRequests: requestResponse.friend_requests.filter((request) => request.status === 'pending'),
+      }),
+    )
+    .finally(() => {
+      notificationBundleRequest = null
+    })
+  return notificationBundleRequest
 }
 
 function containsCoordinatePair(value: string) {
@@ -355,21 +499,33 @@ export function AppLayout() {
   })
   const [notificationOpen, setNotificationOpen] = useState(false)
   const [notificationFilter, setNotificationFilter] = useState<'all' | 'unread'>('all')
-  const [notifications, setNotifications] = useState<NotificationItem[]>([])
-  const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([])
+  const [notifications, setNotifications] = useState<NotificationItem[]>(
+    () => readNotificationBundleCache()?.notifications ?? [],
+  )
+  const [friendRequests, setFriendRequests] = useState<FriendRequest[]>(
+    () => readNotificationBundleCache()?.friendRequests ?? [],
+  )
   const [notificationLoading, setNotificationLoading] = useState(false)
   const [notificationError, setNotificationError] = useState<string | null>(null)
   const [notificationBusy, setNotificationBusy] = useState<string | null>(null)
 
-  async function loadNotifications() {
-    const [notificationResponse, requestResponse] = await Promise.all([
-      api.notifications(),
-      api.friendRequests(),
-    ])
-    setNotifications(notificationResponse.notifications)
-    setFriendRequests(
-      requestResponse.friend_requests.filter((request) => request.status === 'pending'),
-    )
+  function applyNotificationBundle(bundle: NotificationBundle) {
+    setNotifications(bundle.notifications)
+    setFriendRequests(bundle.friendRequests)
+  }
+
+  async function loadNotifications({
+    force = false,
+    showLoading = false,
+  }: {
+    force?: boolean
+    showLoading?: boolean
+  } = {}) {
+    const cached = readNotificationBundleCache()
+    if (cached) applyNotificationBundle(cached)
+    if (showLoading && !cached) setNotificationLoading(true)
+    const bundle = await fetchNotificationBundle(force)
+    applyNotificationBundle(bundle)
   }
 
   useEffect(() => {
@@ -482,13 +638,20 @@ export function AppLayout() {
   }
 
   async function openNotificationPanel() {
-    setNotificationOpen((current) => !current)
+    if (notificationOpen) {
+      setNotificationOpen(false)
+      return
+    }
+
+    setNotificationOpen(true)
     setProfileMenuOpen(false)
     setLocationPickerOpen(false)
-    setNotificationLoading(true)
     setNotificationError(null)
     try {
-      await loadNotifications()
+      await loadNotifications({
+        force: !readNotificationBundleCache(),
+        showLoading: true,
+      })
     } catch (err) {
       setNotificationError(
         err instanceof Error ? err.message : 'Could not load notifications',
@@ -498,14 +661,35 @@ export function AppLayout() {
     }
   }
 
+  function warmNotifications() {
+    void fetchNotificationBundle().catch(() => undefined)
+  }
+
   async function markNotificationRead(item: NotificationItem) {
     if (item.read_at) return
+    const previousNotifications = notifications
+    const readAt = new Date().toISOString()
     setNotificationBusy(`notification-${item.id}`)
     setNotificationError(null)
+    setNotifications((current) =>
+      current.map((notification) =>
+        notification.id === item.id ? { ...notification, read_at: readAt } : notification,
+      ),
+    )
+    updateNotificationBundleCache((bundle) => ({
+      ...bundle,
+      notifications: bundle.notifications.map((notification) =>
+        notification.id === item.id ? { ...notification, read_at: readAt } : notification,
+      ),
+    }))
     try {
       await api.markNotificationRead(item.id)
-      await loadNotifications()
     } catch (err) {
+      setNotifications(previousNotifications)
+      updateNotificationBundleCache((bundle) => ({
+        ...bundle,
+        notifications: previousNotifications,
+      }))
       setNotificationError(
         err instanceof Error ? err.message : 'Could not update notification',
       )
@@ -515,16 +699,27 @@ export function AppLayout() {
   }
 
   async function answerFriendRequest(id: number, action: 'accept' | 'reject') {
+    const previousFriendRequests = friendRequests
     setNotificationBusy(`${action}-${id}`)
     setNotificationError(null)
+    setFriendRequests((current) => current.filter((request) => request.id !== id))
+    updateNotificationBundleCache((bundle) => ({
+      ...bundle,
+      friendRequests: bundle.friendRequests.filter((request) => request.id !== id),
+    }))
     try {
       if (action === 'accept') {
         await api.acceptFriendRequest(id)
       } else {
         await api.rejectFriendRequest(id)
       }
-      await loadNotifications()
+      void loadNotifications({ force: true }).catch(() => undefined)
     } catch (err) {
+      setFriendRequests(previousFriendRequests)
+      updateNotificationBundleCache((bundle) => ({
+        ...bundle,
+        friendRequests: previousFriendRequests,
+      }))
       setNotificationError(
         err instanceof Error ? err.message : 'Could not update friend request',
       )
@@ -735,11 +930,29 @@ export function AppLayout() {
     </div>
   ) : null
 
+  const profilePopover = profileMenuOpen ? (
+    <div className="profile-menu" role="menu" aria-label="Account menu">
+      <NavLink to="/profile" role="menuitem" onClick={() => setProfileMenuOpen(false)}>
+        <Avatar name={user?.display_name ?? 'U'} src={user?.avatar_url} />
+        <div>
+          <strong>{user?.display_name}</strong>
+          <span>{user?.email}</span>
+        </div>
+      </NavLink>
+      <button type="button" role="menuitem" onClick={logout}>
+        <LogOut size={18} />
+        <span>Logout</span>
+      </button>
+    </div>
+  ) : null
+
   return (
     <div className={frameClass}>
       <header className="topbar">
         <NavLink aria-label="Zumers home" className="topbar-left brand-home" to="/">
-          <div className="brand-mark">Z</div>
+          <div className="brand-mark">
+            <Waypoints className="brand-symbol" aria-hidden="true" size={25} strokeWidth={2.6} />
+          </div>
           <strong className="topbar-product-name">Zumers</strong>
         </NavLink>
 
@@ -805,6 +1018,9 @@ export function AppLayout() {
               title="Activity"
               type="button"
               onClick={openNotificationPanel}
+              onFocus={warmNotifications}
+              onPointerEnter={warmNotifications}
+              onTouchStart={warmNotifications}
             >
               <Bell size={21} />
               {notificationBadgeCount > 0 ? (
@@ -832,26 +1048,13 @@ export function AppLayout() {
                 <ChevronDown size={13} />
               </span>
             </button>
-            {profileMenuOpen ? (
-              <div className="profile-menu">
-                <NavLink to="/profile" onClick={() => setProfileMenuOpen(false)}>
-                  <Avatar name={user?.display_name ?? 'U'} src={user?.avatar_url} />
-                  <div>
-                    <strong>{user?.display_name}</strong>
-                    <span>{user?.email}</span>
-                  </div>
-                </NavLink>
-                <button type="button" onClick={logout}>
-                  <LogOut size={18} />
-                  <span>Logout</span>
-                </button>
-              </div>
-            ) : null}
+            {!isMobileHeader ? profilePopover : null}
           </div>
         </div>
       </header>
 
       {isMobileHeader ? notificationPopover : null}
+      {isMobileHeader ? profilePopover : null}
 
       {locationPickerOpen ? (
         <div
@@ -1057,6 +1260,7 @@ export function DiscoverySearchPanel({
   const [query, setQuery] = useState('')
   const [selectedChips, setSelectedChips] = useState<string[]>([])
   const [recentSearches, setRecentSearches] = useState<string[]>(() => loadDiscoveryRecentSearches())
+  const [browseResults, setBrowseResults] = useState<DiscoverySearchResult[]>([])
   const [results, setResults] = useState<DiscoverySearchResult[]>([])
   const [searched, setSearched] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -1071,7 +1275,8 @@ export function DiscoverySearchPanel({
   const [chipRailPage, setChipRailPage] = useState(0)
   const [activeService, setActiveService] = useState<string | null>(null)
   const firstName = firstUserName(user)
-  const showcaseSections = useMemo(() => buildDiscoverySections(results), [results])
+  const showcaseResults = searched ? results : browseResults
+  const showcaseSections = useMemo(() => buildDiscoverySections(showcaseResults), [showcaseResults])
   const heroPreviewItems = showcaseSections[0]?.items.slice(0, 3) ?? []
   const showBrowseSections = !loading && !searched
 
@@ -1108,6 +1313,43 @@ export function DiscoverySearchPanel({
       window.removeEventListener('resize', syncChipRailPage)
     }
   }, [])
+
+  useEffect(() => {
+    if (!user?.id) return
+    let cancelled = false
+    const cachedLocation = readDiscoveryCachedLocation()
+    const baseLocation = {
+      latitude: cachedLocation?.latitude,
+      longitude: cachedLocation?.longitude,
+      radiusKm: cachedLocation ? radiusKm : undefined,
+      limit: 20,
+    }
+    void Promise.all([
+      api.discoverySearch({
+        query: 'restaurant cafe dining food',
+        chips: ['Restaurant or cafe'],
+        ...baseLocation,
+      }),
+      api.discoverySearch({
+        query: 'events music comedy workshop show this weekend',
+        chips: ['Culture and events'],
+        ...baseLocation,
+      }),
+    ])
+      .then(([restaurantResponse, eventResponse]) => {
+        if (!cancelled) {
+          setBrowseResults(mergeDiscoveryResults([
+            ...restaurantResponse.results,
+            ...eventResponse.results,
+          ]))
+        }
+      })
+      .catch(() => undefined)
+
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id])
 
   async function runSearch(
     searchQuery: string,
@@ -1302,7 +1544,7 @@ export function DiscoverySearchPanel({
               ))}
               <input
                 autoFocus={autoFocus}
-                placeholder="Dinner for 4 near me tonight under Rs 1,000"
+                placeholder="Date night, DJ night, brunch or bowling nearby"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
@@ -1489,6 +1731,7 @@ function DiscoveryCard({
   item: DiscoveryShowcaseItem
   onExplore: (item: DiscoveryShowcaseItem) => void
 }) {
+  const navigate = useNavigate()
   const FallbackIcon = discoveryIconForCategory(item.category)
   const cardTone = discoveryToneForCategory(item.category)
   const [saved, setSaved] = useState(() =>
@@ -1505,12 +1748,30 @@ function DiscoveryCard({
     setSaved(next.includes(item.source.business_id))
   }
 
+  function openItem() {
+    if (item.source) {
+      api.prefetchBusinessDetail(item.source.business_id)
+      navigate(`/businesses/${item.source.business_id}`, {
+        state: { businessPreview: item.source },
+      })
+      return
+    }
+    onExplore(item)
+  }
+
+  function warmBusinessDetail() {
+    if (item.source) api.prefetchBusinessDetail(item.source.business_id)
+  }
+
   return (
     <article className={`plan-discovery-card ${cardTone}`}>
       <button
         className="plan-discovery-card-main"
         type="button"
-        onClick={() => onExplore(item)}
+        onClick={openItem}
+        onFocus={warmBusinessDetail}
+        onPointerEnter={warmBusinessDetail}
+        onTouchStart={warmBusinessDetail}
       >
         <div className="plan-discovery-card-media">
           {item.imageUrl ? (
@@ -1639,49 +1900,280 @@ function DiscoverySkeletonSection() {
 function buildDiscoverySections(results: DiscoverySearchResult[]): DiscoverySectionData[] {
   if (results.length === 0) return discoveryDemoSections
 
+  const spotlightItems = buildRestaurantSpotlightItems(results)
+  const restaurantBudgetItems = buildRestaurantBudgetItems(results, 1000)
+  const weekendEventItems = buildWeekendEventItems(results)
   const mapped = results.map(resultToShowcaseItem)
-  const budgetItems = mapped.filter((item) =>
-    /budget|under|rs|from/i.test(item.price ?? item.reason),
-  )
-  const eventItems = mapped.filter((item) =>
-    /event|music|comedy|workshop|ticket|show|live/i.test(`${item.category} ${item.reason} ${item.title}`),
-  )
-  const groupItems = mapped.filter((item) =>
-    /group|friends|family|people/i.test(`${item.reason} ${item.title}`),
-  )
 
   return [
     {
       id: 'tonight',
       title: 'In the spotlight',
-      subtitle: 'Fresh matches from your latest search.',
-      items: mapped.slice(0, 4),
-    },
-    {
-      id: 'trending',
-      title: 'Trending near you',
-      subtitle: 'Places and activities getting attention nearby.',
-      items: mapped.slice(4, 8).length ? mapped.slice(4, 8) : mapped.slice(0, 4),
+      subtitle: 'Restaurants getting the most attention right now.',
+      items: spotlightItems.length ? spotlightItems.slice(0, 4) : mapped.slice(0, 4),
     },
     {
       id: 'budget',
-      title: 'Great plans under your budget',
-      subtitle: 'Options that keep spend predictable.',
-      items: budgetItems.length ? budgetItems.slice(0, 4) : mapped.slice(0, 4),
-    },
-    {
-      id: 'groups',
-      title: 'Perfect for your group',
-      subtitle: 'Shortlist-worthy places for friends and family.',
-      items: groupItems.length ? groupItems.slice(0, 4) : mapped.slice(0, 4),
+      title: 'Great plans under Rs. 1000',
+      subtitle: 'Restaurant picks that keep spend predictable.',
+      items: restaurantBudgetItems.length ? restaurantBudgetItems.slice(0, 4) : mapped.slice(0, 4),
     },
     {
       id: 'weekend',
       title: 'Events this weekend',
       subtitle: 'Shows, workshops, and activities to book ahead.',
-      items: eventItems.length ? eventItems.slice(0, 4) : mapped.slice(0, 3),
+      items: weekendEventItems.length ? weekendEventItems.slice(0, 4) : mapped.slice(0, 3),
     },
   ].filter((section) => section.items.length > 0)
+}
+
+function mergeDiscoveryResults(results: DiscoverySearchResult[]) {
+  const byID = new Map<string, DiscoverySearchResult>()
+  results.forEach((result) => {
+    const current = byID.get(result.id)
+    if (!current || result.score > current.score) {
+      byID.set(result.id, result)
+    }
+  })
+  return [...byID.values()]
+}
+
+function buildRestaurantSpotlightItems(results: DiscoverySearchResult[]) {
+  const byBusinessID = new Map<number, DiscoverySearchResult>()
+  results
+    .filter(isRestaurantDiscoveryResult)
+    .forEach((result) => {
+      const current = byBusinessID.get(result.business_id)
+      if (!current || restaurantAttentionScore(result) > restaurantAttentionScore(current)) {
+        byBusinessID.set(result.business_id, result)
+      }
+    })
+
+  return [...byBusinessID.values()]
+    .sort((left, right) => restaurantAttentionScore(right) - restaurantAttentionScore(left))
+    .map(resultToSpotlightItem)
+}
+
+function buildRestaurantBudgetItems(results: DiscoverySearchResult[], budgetLimit: number) {
+  const byBusinessID = new Map<number, DiscoverySearchResult>()
+  results
+    .filter((result) => isRestaurantDiscoveryResult(result) && isUnderRestaurantBudget(result, budgetLimit))
+    .forEach((result) => {
+      const current = byBusinessID.get(result.business_id)
+      if (!current || restaurantBudgetScore(result, budgetLimit) > restaurantBudgetScore(current, budgetLimit)) {
+        byBusinessID.set(result.business_id, result)
+      }
+    })
+
+  return [...byBusinessID.values()]
+    .sort((left, right) => restaurantBudgetScore(right, budgetLimit) - restaurantBudgetScore(left, budgetLimit))
+    .map((result) => resultToBudgetRestaurantItem(result, budgetLimit))
+}
+
+function isUnderRestaurantBudget(result: DiscoverySearchResult, budgetLimit: number) {
+  const comparablePrice = restaurantComparablePrice(result)
+  if (comparablePrice > 0) return comparablePrice <= budgetLimit
+  return result.price_range === 'budget'
+}
+
+function restaurantComparablePrice(result: DiscoverySearchResult) {
+  if (typeof result.average_price_per_person === 'number' && result.average_price_per_person > 0) {
+    return result.average_price_per_person
+  }
+  if (typeof result.starting_price === 'number' && result.starting_price > 0) {
+    return result.starting_price
+  }
+  return 0
+}
+
+function restaurantBudgetScore(result: DiscoverySearchResult, budgetLimit: number) {
+  const price = restaurantComparablePrice(result)
+  const likes = result.likes_received ?? 0
+  const distance = typeof result.distance_km === 'number' ? result.distance_km : 12
+  let score = result.score * 0.55
+  score += Math.log1p(likes) * 18
+  if (price > 0) {
+    score += Math.max(0, (budgetLimit - price) / budgetLimit) * 18
+  } else if (result.price_range === 'budget') {
+    score += 10
+  }
+  if (result.open_now) score += 8
+  if (result.active_offer_title) score += 8
+  if (result.image_url) score += 4
+  score -= Math.min(distance, 20) * 0.6
+  return score
+}
+
+function resultToBudgetRestaurantItem(result: DiscoverySearchResult, budgetLimit: number): DiscoveryShowcaseItem {
+  const item = resultToShowcaseItem(result)
+  const price = restaurantComparablePrice(result)
+  return {
+    ...item,
+    title: result.business_name,
+    businessName: result.title !== result.business_name ? result.title : item.category,
+    reason: price > 0
+      ? `Under Rs. ${budgetLimit}`
+      : 'Budget restaurant pick',
+  }
+}
+
+function buildWeekendEventItems(results: DiscoverySearchResult[]) {
+  const byEventID = new Map<string, DiscoverySearchResult>()
+  results
+    .filter(isWeekendEventResult)
+    .forEach((result) => {
+      const current = byEventID.get(result.id)
+      if (!current || weekendEventScore(result) > weekendEventScore(current)) {
+        byEventID.set(result.id, result)
+      }
+    })
+
+  return [...byEventID.values()]
+    .sort((left, right) => weekendEventScore(right) - weekendEventScore(left))
+    .map(resultToWeekendEventItem)
+}
+
+function isWeekendEventResult(result: DiscoverySearchResult) {
+  if (!isEventDiscoveryResult(result)) return false
+  const startsAt = parseDiscoveryDate(result.next_event_starts_at)
+  if (!startsAt) return Boolean(result.next_event_title)
+
+  const now = new Date()
+  const { start, end } = currentWeekendWindow(now)
+  return startsAt >= now && startsAt >= start && startsAt <= end
+}
+
+function isEventDiscoveryResult(result: DiscoverySearchResult) {
+  const text = [
+    result.category,
+    result.subcategory,
+    result.title,
+    result.business_name,
+    result.description,
+    result.tags,
+    result.service_tags,
+    result.best_for,
+    result.next_event_title,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  return /\b(event|events|music|comedy|workshop|ticket|show|live|concert|gig|festival|open mic|stand-up|standup|class|session)\b/.test(text)
+}
+
+function weekendEventScore(result: DiscoverySearchResult) {
+  const likes = result.likes_received ?? 0
+  const distance = typeof result.distance_km === 'number' ? result.distance_km : 12
+  const startsAt = parseDiscoveryDate(result.next_event_starts_at)
+  let score = result.score * 0.55
+  score += Math.log1p(likes) * 18
+  if (result.next_event_title) score += 24
+  if (startsAt) {
+    const { start } = currentWeekendWindow()
+    const hoursFromWeekendStart = Math.max(0, (startsAt.getTime() - start.getTime()) / 36e5)
+    score += Math.max(0, 18 - hoursFromWeekendStart * 0.25)
+  } else {
+    score -= 6
+  }
+  if (result.image_url) score += 5
+  if (result.active_offer_title) score += 4
+  if (result.booking_required) score += 3
+  if (result.verification_level && result.verification_level !== 'unverified') score += 4
+  score -= Math.min(distance, 25) * 0.7
+  return score
+}
+
+function resultToWeekendEventItem(result: DiscoverySearchResult): DiscoveryShowcaseItem {
+  const item = resultToShowcaseItem(result)
+  const startsAt = parseDiscoveryDate(result.next_event_starts_at)
+  return {
+    ...item,
+    title: result.next_event_title ?? result.title,
+    businessName: result.business_name,
+    reason: startsAt ? formatWeekendEventReason(startsAt) : 'Weekend event',
+    dateLabel: startsAt ? formatWeekendEventDay(startsAt) : 'Event',
+  }
+}
+
+function currentWeekendWindow(now = new Date()) {
+  const start = new Date(now)
+  start.setHours(0, 0, 0, 0)
+  const day = start.getDay()
+  const daysUntilSaturday = day === 0 ? -1 : day === 6 ? 0 : 6 - day
+  start.setDate(start.getDate() + daysUntilSaturday)
+
+  const end = new Date(start)
+  end.setDate(start.getDate() + 1)
+  end.setHours(23, 59, 59, 999)
+  return { start, end }
+}
+
+function parseDiscoveryDate(value?: string) {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function formatWeekendEventDay(date: Date) {
+  return date.toLocaleDateString(undefined, { weekday: 'short' })
+}
+
+function formatWeekendEventReason(date: Date) {
+  return date.toLocaleDateString(undefined, {
+    weekday: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+function isRestaurantDiscoveryResult(result: DiscoverySearchResult) {
+  const text = [
+    result.category,
+    result.subcategory,
+    result.title,
+    result.business_name,
+    result.description,
+    result.tags,
+    result.service_tags,
+    result.best_for,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+
+  return /\b(restaurant|cafe|dining|dinner|lunch|breakfast|food|street food|momos|chaat|coffee|bistro|bakery)\b/.test(text)
+}
+
+function restaurantAttentionScore(result: DiscoverySearchResult) {
+  const likes = result.likes_received ?? 0
+  const distance = typeof result.distance_km === 'number' ? result.distance_km : 12
+  let score = Math.log1p(likes) * 28
+  score += result.score * 0.65
+  if (result.open_now) score += 14
+  if (result.active_offer_title) score += 10
+  if (result.image_url) score += 6
+  if (result.liked_by_me) score += 4
+  if (result.verification_level && result.verification_level !== 'unverified') score += 5
+  score -= Math.min(distance, 20) * 0.8
+  return score
+}
+
+function resultToSpotlightItem(result: DiscoverySearchResult): DiscoveryShowcaseItem {
+  const item = resultToShowcaseItem(result)
+  const likes = result.likes_received ?? 0
+  return {
+    ...item,
+    title: result.business_name,
+    businessName: result.title !== result.business_name ? result.title : item.category,
+    reason: likes > 0
+      ? `${compactDiscoveryCount(likes)} people interested`
+      : result.open_now
+        ? 'Open and getting attention'
+        : result.active_offer_title
+          ? 'Live offer getting attention'
+          : 'Restaurant getting attention',
+  }
 }
 
 function resultToShowcaseItem(result: DiscoverySearchResult): DiscoveryShowcaseItem {
@@ -1696,7 +2188,7 @@ function resultToShowcaseItem(result: DiscoverySearchResult): DiscoveryShowcaseI
     reason: result.reasons[0] ?? result.best_for ?? (result.open_now ? 'Open now' : 'Worth shortlisting'),
     rating: result.score ? Math.max(3.8, Math.min(4.9, 3.9 + result.score / 250)) : undefined,
     reviews: result.likes_received,
-    distance: result.distance_km ? `${result.distance_km} km` : undefined,
+    distance: formatDiscoveryDistance(result.distance_km),
     price: price ?? undefined,
     status: result.open_now ? 'Open now' : undefined,
     offer: result.active_offer_title,
@@ -1759,7 +2251,7 @@ function DiscoveryResultCard({ result }: { result: DiscoverySearchResult }) {
     : null
   const location = [result.area, result.city].filter(Boolean).join(', ') || result.location
   const rating = result.score ? Math.max(3.8, Math.min(4.9, 3.9 + result.score / 250)) : null
-  const distance = typeof result.distance_km === 'number' ? `${Math.round(result.distance_km * 10) / 10} km` : null
+  const addressLine = discoveryResultAddressLine(result, location)
   const displayTitle = result.business_name || result.title
   const specialitySource = result.subcategory ?? result.category
   const speciality = specialitySource.split(/[,\s/&]+/).find(Boolean) ?? 'Place'
@@ -1833,6 +2325,24 @@ function DiscoveryResultCard({ result }: { result: DiscoverySearchResult }) {
     setBookingOpen((value) => !value)
   }
 
+  function openBusinessDetail() {
+    api.prefetchBusinessDetail(result.business_id)
+    navigate(`/businesses/${result.business_id}`, {
+      state: { businessPreview: result },
+    })
+  }
+
+  function warmBusinessDetail() {
+    api.prefetchBusinessDetail(result.business_id)
+  }
+
+  function handleBusinessDetailKey(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      openBusinessDetail()
+    }
+  }
+
   async function submitBooking(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const requesterName = bookingName.trim()
@@ -1872,7 +2382,16 @@ function DiscoveryResultCard({ result }: { result: DiscoverySearchResult }) {
   }
 
   return (
-    <article className="discovery-result-card">
+    <article
+      className="discovery-result-card"
+      role="link"
+      tabIndex={0}
+      onClick={openBusinessDetail}
+      onFocus={warmBusinessDetail}
+      onKeyDown={handleBusinessDetailKey}
+      onPointerEnter={warmBusinessDetail}
+      onTouchStart={warmBusinessDetail}
+    >
       <div className="discovery-result-media">
         {result.image_url ? (
           <img src={result.image_url} alt={displayTitle} loading="lazy" decoding="async" />
@@ -1894,8 +2413,7 @@ function DiscoveryResultCard({ result }: { result: DiscoverySearchResult }) {
             <h3>{displayTitle}</h3>
           </div>
         </div>
-        {distance ? <p className="discovery-distance-line">{distance} from your location</p> : null}
-        {location ? <p className="discovery-location-line">{location}</p> : null}
+        {addressLine ? <p className="discovery-location-line">{addressLine}</p> : null}
         <p className="discovery-speciality-line">{costLine}</p>
         <p className={result.open_now ? 'discovery-status-line open' : 'discovery-status-line'}>
           {statusLabel}
@@ -1912,7 +2430,10 @@ function DiscoveryResultCard({ result }: { result: DiscoverySearchResult }) {
             className="discovery-action-button discovery-like-button"
             aria-label={liked ? 'Unlike business' : 'Like business'}
             title={liked ? 'Unlike business' : 'Like business'}
-            onClick={toggleLike}
+            onClick={(event) => {
+              event.stopPropagation()
+              void toggleLike()
+            }}
             disabled={likeBusy}
           >
             <Heart size={18} fill={liked ? 'currentColor' : 'none'} />
@@ -1923,7 +2444,10 @@ function DiscoveryResultCard({ result }: { result: DiscoverySearchResult }) {
             className="discovery-action-button"
             aria-label="Book"
             title="Book"
-            onClick={bookResult}
+            onClick={(event) => {
+              event.stopPropagation()
+              bookResult()
+            }}
           >
             <CalendarCheck size={18} />
             <span>Book</span>
@@ -1933,7 +2457,10 @@ function DiscoveryResultCard({ result }: { result: DiscoverySearchResult }) {
             className="discovery-action-button"
             aria-label="Share"
             title="Share"
-            onClick={shareResult}
+            onClick={(event) => {
+              event.stopPropagation()
+              shareResult()
+            }}
           >
             <Share2 size={18} />
             <span>Share</span>
@@ -1943,7 +2470,10 @@ function DiscoveryResultCard({ result }: { result: DiscoverySearchResult }) {
             className={`discovery-action-button ${saved ? 'is-saved' : ''}`}
             aria-label={saved ? 'Saved' : 'Save'}
             title={saved ? 'Saved' : 'Save'}
-            onClick={toggleSave}
+            onClick={(event) => {
+              event.stopPropagation()
+              toggleSave()
+            }}
           >
             <Bookmark size={18} fill={saved ? 'currentColor' : 'none'} />
             <span>{saved ? 'Saved' : 'Save'}</span>
@@ -1951,7 +2481,11 @@ function DiscoveryResultCard({ result }: { result: DiscoverySearchResult }) {
         </div>
         {actionStatus ? <span className="discovery-action-status">{actionStatus}</span> : null}
         {bookingOpen ? (
-          <form className="discovery-booking-form" onSubmit={submitBooking}>
+          <form
+            className="discovery-booking-form"
+            onClick={(event) => event.stopPropagation()}
+            onSubmit={submitBooking}
+          >
             <label>
               <span>Name</span>
               <input
@@ -2023,6 +2557,18 @@ function discoveryPriceLabel(result: DiscoverySearchResult) {
     default:
       return null
   }
+}
+
+function discoveryResultAddressLine(result: DiscoverySearchResult, fallbackLocation: string) {
+  const distance = formatDiscoveryDistance(result.distance_km)
+  return [distance, fallbackLocation].filter(Boolean).join(' - ')
+}
+
+function formatDiscoveryDistance(distanceKm?: number) {
+  if (typeof distanceKm !== 'number' || !Number.isFinite(distanceKm) || distanceKm < 0) {
+    return undefined
+  }
+  return `${distanceKm.toFixed(1)}Km`
 }
 
 function discoverySharePayload(

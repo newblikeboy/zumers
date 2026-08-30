@@ -336,6 +336,7 @@ export type DiscoverySearchResult = {
   image_url?: string
   active_offer_title?: string
   next_event_title?: string
+  next_event_starts_at?: string
   booking_required: boolean
   walk_in_available: boolean
   contact_phone?: string
@@ -352,6 +353,14 @@ export type BusinessLikeResponse = {
   business_id: number
   liked: boolean
   likes_received: number
+}
+
+export type BusinessDetailResponse = {
+  business: BusinessAccount
+  offers: BusinessOffer[]
+  events: BusinessEvent[]
+  likes_received: number
+  liked_by_me: boolean
 }
 
 export type DiscoverySearchResponse = {
@@ -477,17 +486,32 @@ export type MessageReceipt = {
   read_count: number
 }
 
+export type MessageReceiptUpdate = {
+  conversation_id: number
+  message_ids: number[]
+  messages?: MessageReceipt[]
+  delivered_at?: string
+  read_at?: string
+  reader_id?: number
+  recipient_id?: number
+  recipient_ids?: number[]
+}
+
 export type Conversation = {
   id: number
   user_one_id?: number
   user_two_id?: number
   conversation_type: 'direct' | 'group'
   title?: string
+  avatar_url?: string
+  avatar_public_id?: string
   created_by?: number
   other_user?: User
   members: User[]
   member_count: number
   latest_message?: Message
+  unread_count: number
+  first_unread_message_id?: number
   created_at: string
   updated_at: string
 }

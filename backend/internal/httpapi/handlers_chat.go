@@ -15,6 +15,16 @@ type conversationCreateRequest struct {
 	MemberIDs []int64 `json:"member_ids"`
 }
 
+type conversationMembersRequest struct {
+	MemberIDs []int64 `json:"member_ids"`
+}
+
+type conversationUpdateRequest struct {
+	Title          *string `json:"title"`
+	AvatarURL      *string `json:"avatar_url"`
+	AvatarPublicID *string `json:"avatar_public_id"`
+}
+
 type messageCreateRequest struct {
 	MessageType   string  `json:"message_type"`
 	Content       *string `json:"content"`
@@ -32,11 +42,15 @@ type conversationResponse struct {
 	UserTwoID        *int64           `json:"user_two_id,omitempty"`
 	ConversationType string           `json:"conversation_type"`
 	Title            *string          `json:"title,omitempty"`
+	AvatarURL        *string          `json:"avatar_url,omitempty"`
+	AvatarPublicID   *string          `json:"avatar_public_id,omitempty"`
 	CreatedBy        *int64           `json:"created_by,omitempty"`
 	OtherUser        *userResponse    `json:"other_user,omitempty"`
 	Members          []userResponse   `json:"members"`
 	MemberCount      int              `json:"member_count"`
 	Latest           *messageResponse `json:"latest_message,omitempty"`
+	UnreadCount      int              `json:"unread_count"`
+	FirstUnreadID    *int64           `json:"first_unread_message_id,omitempty"`
 	CreatedAt        string           `json:"created_at"`
 	UpdatedAt        string           `json:"updated_at"`
 }
@@ -154,7 +168,7 @@ func (s *Server) handleConversationsList(w http.ResponseWriter, r *http.Request)
 	userID := currentUserID(r)
 	rows, err := s.db.QueryContext(
 		r.Context(),
-		`SELECT c.id, c.user_one_id, c.user_two_id, c.conversation_type, c.title, c.created_by, c.created_at::text, c.updated_at::text
+		`SELECT c.id, c.user_one_id, c.user_two_id, c.conversation_type, c.title, c.avatar_url, c.avatar_public_id, c.created_by, c.created_at::text, c.updated_at::text
 		 FROM conversations c
 		 JOIN conversation_members cm ON cm.conversation_id = c.id
 		 WHERE cm.user_id = $1 AND cm.left_at IS NULL
@@ -189,6 +203,10 @@ func (s *Server) handleConversationsList(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusInternalServerError, "could not load conversation members")
 		return
 	}
+	if err := s.hydrateUnreadSummaries(r.Context(), conversations, userID); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load unread messages")
+		return
+	}
 	latestByConversationID, err := s.getLatestMessages(r.Context(), conversationIDs, userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not load latest messages")
@@ -202,6 +220,231 @@ func (s *Server) handleConversationsList(w http.ResponseWriter, r *http.Request)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"conversations": conversations})
+}
+
+func (s *Server) handleConversationUpdate(w http.ResponseWriter, r *http.Request) {
+	conversationID, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid conversation id")
+		return
+	}
+
+	var req conversationUpdateRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	userID := currentUserID(r)
+	conversation, err := s.getConversation(r.Context(), conversationID, userID)
+	if err != nil {
+		writeError(w, http.StatusForbidden, "conversation not found")
+		return
+	}
+	if conversation.ConversationType != "group" {
+		writeError(w, http.StatusBadRequest, "only group conversations can be edited")
+		return
+	}
+	if !isConversationOwner(conversation, userID) {
+		writeError(w, http.StatusForbidden, "only group admins can edit this group")
+		return
+	}
+	if req.Title == nil && req.AvatarURL == nil && req.AvatarPublicID == nil {
+		writeJSON(w, http.StatusOK, conversation)
+		return
+	}
+
+	var title any
+	updateTitle := req.Title != nil
+	if updateTitle {
+		cleanTitle := strings.TrimSpace(*req.Title)
+		if cleanTitle == "" {
+			writeError(w, http.StatusBadRequest, "group name is required")
+			return
+		}
+		if len(cleanTitle) > 120 {
+			writeError(w, http.StatusBadRequest, "group name must be 120 characters or fewer")
+			return
+		}
+		title = cleanTitle
+	}
+
+	var avatarURL any
+	updateAvatarURL := req.AvatarURL != nil
+	if updateAvatarURL {
+		cleanAvatarURL := strings.TrimSpace(*req.AvatarURL)
+		if cleanAvatarURL != "" {
+			avatarURL = cleanAvatarURL
+		}
+	}
+
+	var avatarPublicID any
+	updateAvatarPublicID := req.AvatarPublicID != nil
+	if updateAvatarPublicID {
+		cleanAvatarPublicID := strings.TrimSpace(*req.AvatarPublicID)
+		if cleanAvatarPublicID != "" {
+			avatarPublicID = cleanAvatarPublicID
+		}
+	}
+
+	_, err = s.db.ExecContext(
+		r.Context(),
+		`UPDATE conversations
+		 SET title = CASE WHEN $2 THEN $3::VARCHAR(120) ELSE title END,
+		     avatar_url = CASE WHEN $4 THEN $5::TEXT ELSE avatar_url END,
+		     avatar_public_id = CASE WHEN $6 THEN $7::VARCHAR(255) ELSE avatar_public_id END,
+		     updated_at = CURRENT_TIMESTAMP
+		 WHERE id = $1`,
+		conversationID,
+		updateTitle,
+		title,
+		updateAvatarURL,
+		avatarURL,
+		updateAvatarPublicID,
+		avatarPublicID,
+	)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not update group")
+		return
+	}
+
+	updated, err := s.getConversation(r.Context(), conversationID, userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load conversation")
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+func (s *Server) handleConversationMembersAdd(w http.ResponseWriter, r *http.Request) {
+	conversationID, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid conversation id")
+		return
+	}
+
+	var req conversationMembersRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	userID := currentUserID(r)
+	conversation, err := s.getConversation(r.Context(), conversationID, userID)
+	if err != nil {
+		writeError(w, http.StatusForbidden, "conversation not found")
+		return
+	}
+	if conversation.ConversationType != "group" {
+		writeError(w, http.StatusBadRequest, "members can only be added to groups")
+		return
+	}
+	if !isConversationOwner(conversation, userID) {
+		writeError(w, http.StatusForbidden, "only group admins can add members")
+		return
+	}
+
+	existingMembers := make(map[int64]struct{}, len(conversation.Members))
+	for _, member := range conversation.Members {
+		existingMembers[member.ID] = struct{}{}
+	}
+	memberIDs := uniquePositiveIDs(req.MemberIDs, userID)
+	added := 0
+	for _, memberID := range memberIDs {
+		if _, exists := existingMembers[memberID]; exists {
+			continue
+		}
+		if !areFriends(r.Context(), s.db, userID, memberID) {
+			writeError(w, http.StatusForbidden, "groups can only include your friends")
+			return
+		}
+		if err := s.ensureConversationMember(r.Context(), conversationID, memberID, "member"); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not add member")
+			return
+		}
+		added++
+	}
+	if added == 0 {
+		writeError(w, http.StatusBadRequest, "select at least one new member")
+		return
+	}
+	_, _ = s.db.ExecContext(
+		r.Context(),
+		`UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+		conversationID,
+	)
+
+	updated, err := s.getConversation(r.Context(), conversationID, userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load conversation")
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+func (s *Server) handleConversationMemberRemove(w http.ResponseWriter, r *http.Request) {
+	conversationID, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid conversation id")
+		return
+	}
+	memberID, err := parseID(r.PathValue("member_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid member id")
+		return
+	}
+
+	userID := currentUserID(r)
+	conversation, err := s.getConversation(r.Context(), conversationID, userID)
+	if err != nil {
+		writeError(w, http.StatusForbidden, "conversation not found")
+		return
+	}
+	if conversation.ConversationType != "group" {
+		writeError(w, http.StatusBadRequest, "members can only be removed from groups")
+		return
+	}
+	if !isConversationOwner(conversation, userID) {
+		writeError(w, http.StatusForbidden, "only group admins can remove members")
+		return
+	}
+	if memberID == userID {
+		writeError(w, http.StatusBadRequest, "group admin cannot remove themselves")
+		return
+	}
+	if memberID == conversationOwnerID(conversation) {
+		writeError(w, http.StatusBadRequest, "group admin cannot be removed")
+		return
+	}
+
+	result, err := s.db.ExecContext(
+		r.Context(),
+		`UPDATE conversation_members
+		 SET left_at = CURRENT_TIMESTAMP
+		 WHERE conversation_id = $1 AND user_id = $2 AND left_at IS NULL`,
+		conversationID,
+		memberID,
+	)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not remove member")
+		return
+	}
+	if rows, err := result.RowsAffected(); err != nil || rows == 0 {
+		writeError(w, http.StatusNotFound, "member not found")
+		return
+	}
+	_, _ = s.db.ExecContext(
+		r.Context(),
+		`UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+		conversationID,
+	)
+
+	updated, err := s.getConversation(r.Context(), conversationID, userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load conversation")
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
 }
 
 func (s *Server) createGroupConversation(ctx context.Context, userID int64, req conversationCreateRequest) (conversationResponse, error) {
@@ -307,22 +550,47 @@ func (s *Server) handleMessageHistory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid before_id")
 		return
 	}
+	anchorID, err := optionalPositiveID(r.URL.Query().Get("anchor_id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid anchor_id")
+		return
+	}
 	limit := pageLimit(r, 30, 100)
 	args := []any{conversationID}
-	query := `SELECT id, conversation_id, sender_id, message_type, content, media_url, media_public_id, delivered_at::text, read_at::text, created_at::text
-		 FROM messages
-		 WHERE conversation_id = $1 AND deleted_at IS NULL`
-	if beforeID > 0 {
-		args = append(args, beforeID)
-		query += ` AND (created_at, id) < (
-		    SELECT created_at, id
-		    FROM messages
-		    WHERE id = $2 AND conversation_id = $1 AND deleted_at IS NULL
-		 )`
+	query := ""
+	if anchorID > 0 {
+		args = append(args, anchorID, limit+1)
+		query = `SELECT id, conversation_id, sender_id, message_type, content, media_url, media_public_id, delivered_at::text, read_at::text, created_at::text
+		 FROM (
+		   SELECT id, conversation_id, sender_id, message_type, content, media_url, media_public_id, delivered_at, read_at, created_at
+		   FROM messages
+		   WHERE conversation_id = $1
+		     AND deleted_at IS NULL
+		     AND (created_at, id) >= (
+		       SELECT created_at, id
+		       FROM messages
+		       WHERE id = $2 AND conversation_id = $1 AND deleted_at IS NULL
+		     )
+		   ORDER BY created_at ASC, id ASC
+		   LIMIT $3
+		 ) anchored_messages
+		 ORDER BY created_at DESC, id DESC`
+	} else {
+		query = `SELECT id, conversation_id, sender_id, message_type, content, media_url, media_public_id, delivered_at::text, read_at::text, created_at::text
+			 FROM messages
+			 WHERE conversation_id = $1 AND deleted_at IS NULL`
+		if beforeID > 0 {
+			args = append(args, beforeID)
+			query += ` AND (created_at, id) < (
+			    SELECT created_at, id
+			    FROM messages
+			    WHERE id = $2 AND conversation_id = $1 AND deleted_at IS NULL
+			 )`
+		}
+		args = append(args, limit+1)
+		query += ` ORDER BY created_at DESC, id DESC
+			 LIMIT $` + strconv.Itoa(len(args))
 	}
-	args = append(args, limit+1)
-	query += ` ORDER BY created_at DESC, id DESC
-		 LIMIT $` + strconv.Itoa(len(args))
 
 	rows, err := s.db.QueryContext(
 		r.Context(),
@@ -351,6 +619,13 @@ func (s *Server) handleMessageHistory(w http.ResponseWriter, r *http.Request) {
 	hasMore := len(messages) > limit
 	if hasMore {
 		messages = messages[:limit]
+	}
+	if anchorID > 0 && len(messages) > 0 {
+		hasMore, err = s.hasMessageBefore(r.Context(), conversationID, messages[len(messages)-1].ID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "could not check older messages")
+			return
+		}
 	}
 	if r.URL.Query().Get("fast") != "1" {
 		if err := s.hydrateMessages(r.Context(), messages, currentUserID(r), false); err != nil {
@@ -600,7 +875,7 @@ func (s *Server) createMessage(ctx context.Context, senderID int64, conversation
 func (s *Server) getConversation(ctx context.Context, conversationID int64, viewerID int64) (conversationResponse, error) {
 	item, err := scanConversation(s.db.QueryRowContext(
 		ctx,
-		`SELECT c.id, c.user_one_id, c.user_two_id, c.conversation_type, c.title, c.created_by, c.created_at::text, c.updated_at::text
+		`SELECT c.id, c.user_one_id, c.user_two_id, c.conversation_type, c.title, c.avatar_url, c.avatar_public_id, c.created_by, c.created_at::text, c.updated_at::text
 		 FROM conversations c
 		 JOIN conversation_members cm ON cm.conversation_id = c.id
 		 WHERE c.id = $1 AND cm.user_id = $2 AND cm.left_at IS NULL`,
@@ -614,6 +889,11 @@ func (s *Server) getConversation(ctx context.Context, conversationID int64, view
 	if err := s.hydrateConversation(ctx, &item, viewerID); err != nil {
 		return conversationResponse{}, err
 	}
+	conversations := []conversationResponse{item}
+	if err := s.hydrateUnreadSummaries(ctx, conversations, viewerID); err != nil {
+		return conversationResponse{}, err
+	}
+	item = conversations[0]
 	return item, nil
 }
 
@@ -679,6 +959,27 @@ func (s *Server) getLatestMessages(ctx context.Context, conversationIDs []int64,
 	return messagesByConversationID, nil
 }
 
+func (s *Server) hasMessageBefore(ctx context.Context, conversationID int64, beforeID int64) (bool, error) {
+	var exists bool
+	err := s.db.QueryRowContext(
+		ctx,
+		`SELECT EXISTS (
+		   SELECT 1
+		   FROM messages
+		   WHERE conversation_id = $1
+		     AND deleted_at IS NULL
+		     AND (created_at, id) < (
+		       SELECT created_at, id
+		       FROM messages
+		       WHERE id = $2 AND conversation_id = $1 AND deleted_at IS NULL
+		     )
+		 )`,
+		conversationID,
+		beforeID,
+	).Scan(&exists)
+	return exists, err
+}
+
 func (s *Server) isConversationParticipant(ctx context.Context, conversationID int64, userID int64) bool {
 	var exists bool
 	err := s.db.QueryRowContext(
@@ -742,6 +1043,79 @@ func (s *Server) conversationMemberRoles(ctx context.Context, conversationID int
 		rolesByUserID[userID] = role
 	}
 	return rolesByUserID, rows.Err()
+}
+
+func (s *Server) hydrateUnreadSummaries(ctx context.Context, conversations []conversationResponse, viewerID int64) error {
+	if len(conversations) == 0 {
+		return nil
+	}
+
+	placeholders := make([]string, 0, len(conversations))
+	args := make([]any, 0, len(conversations)+1)
+	seen := make(map[int64]struct{}, len(conversations))
+	for _, conversation := range conversations {
+		if conversation.ID <= 0 {
+			continue
+		}
+		if _, exists := seen[conversation.ID]; exists {
+			continue
+		}
+		seen[conversation.ID] = struct{}{}
+		args = append(args, conversation.ID)
+		placeholders = append(placeholders, "$"+strconv.Itoa(len(args)))
+	}
+	if len(args) == 0 {
+		return nil
+	}
+	args = append(args, viewerID)
+	viewerArg := "$" + strconv.Itoa(len(args))
+
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT mr.conversation_id,
+		        COUNT(*)::int,
+		        (ARRAY_AGG(mr.message_id ORDER BY m.created_at, m.id))[1]
+		 FROM message_receipts mr
+		 JOIN messages m ON m.id = mr.message_id
+		 WHERE mr.conversation_id IN (`+strings.Join(placeholders, ",")+`)
+		   AND mr.user_id = `+viewerArg+`
+		   AND mr.read_at IS NULL
+		   AND m.sender_id <> `+viewerArg+`
+		   AND m.deleted_at IS NULL
+		 GROUP BY mr.conversation_id`,
+		args...,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	type unreadSummary struct {
+		count         int
+		firstUnreadID int64
+	}
+	summaries := make(map[int64]unreadSummary)
+	for rows.Next() {
+		var conversationID int64
+		var summary unreadSummary
+		if err := rows.Scan(&conversationID, &summary.count, &summary.firstUnreadID); err != nil {
+			return err
+		}
+		summaries[conversationID] = summary
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for index := range conversations {
+		if summary, exists := summaries[conversations[index].ID]; exists {
+			conversations[index].UnreadCount = summary.count
+			firstUnreadID := summary.firstUnreadID
+			conversations[index].FirstUnreadID = &firstUnreadID
+		}
+	}
+
+	return nil
 }
 
 func (s *Server) hydrateConversation(ctx context.Context, item *conversationResponse, viewerID int64) error {
@@ -869,7 +1243,10 @@ func (s *Server) ensureConversationMember(ctx context.Context, conversationID in
 		ctx,
 		`INSERT INTO conversation_members (conversation_id, user_id, role)
 		 VALUES ($1, $2, $3)
-		 ON CONFLICT (conversation_id, user_id) DO NOTHING`,
+		 ON CONFLICT (conversation_id, user_id) DO UPDATE
+		 SET role = EXCLUDED.role,
+		     left_at = NULL,
+		     joined_at = CURRENT_TIMESTAMP`,
 		conversationID,
 		userID,
 		role,
@@ -1377,13 +1754,15 @@ func (s *Server) syncMessageAggregateReceipts(ctx context.Context, item messageR
 func scanConversation(scanner userScanner) (conversationResponse, error) {
 	var item conversationResponse
 	var userTwoID, createdBy sql.NullInt64
-	var title sql.NullString
+	var title, avatarURL, avatarPublicID sql.NullString
 	err := scanner.Scan(
 		&item.ID,
 		&item.UserOneID,
 		&userTwoID,
 		&item.ConversationType,
 		&title,
+		&avatarURL,
+		&avatarPublicID,
 		&createdBy,
 		&item.CreatedAt,
 		&item.UpdatedAt,
@@ -1398,6 +1777,14 @@ func scanConversation(scanner userScanner) (conversationResponse, error) {
 	if title.Valid {
 		value := title.String
 		item.Title = &value
+	}
+	if avatarURL.Valid {
+		value := avatarURL.String
+		item.AvatarURL = &value
+	}
+	if avatarPublicID.Valid {
+		value := avatarPublicID.String
+		item.AvatarPublicID = &value
 	}
 	if createdBy.Valid {
 		value := createdBy.Int64
@@ -1498,6 +1885,22 @@ func otherParticipant(userOneID int64, userTwoID int64, userID int64) int64 {
 		return userTwoID
 	}
 	return userOneID
+}
+
+func conversationOwnerID(conversation conversationResponse) int64 {
+	if conversation.CreatedBy != nil {
+		return *conversation.CreatedBy
+	}
+	for _, member := range conversation.Members {
+		if member.Role != nil && *member.Role == "owner" {
+			return member.ID
+		}
+	}
+	return 0
+}
+
+func isConversationOwner(conversation conversationResponse, userID int64) bool {
+	return conversationOwnerID(conversation) == userID
 }
 
 func uniquePositiveIDs(values []int64, excludedID int64) []int64 {

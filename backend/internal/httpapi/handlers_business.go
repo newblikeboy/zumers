@@ -290,6 +290,14 @@ type businessAuthResponse struct {
 	Business             businessResponse `json:"business"`
 }
 
+type businessDetailResponse struct {
+	Business      businessResponse `json:"business"`
+	Offers        []businessOffer  `json:"offers"`
+	Events        []businessEvent  `json:"events"`
+	LikesReceived int64            `json:"likes_received"`
+	LikedByMe     bool             `json:"liked_by_me"`
+}
+
 func (s *Server) handleBusinessSignup(w http.ResponseWriter, r *http.Request) {
 	var req businessSignupRequest
 	if err := decodeJSON(r, &req); err != nil {
@@ -537,6 +545,71 @@ func (s *Server) handleBusinessMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, business)
+}
+
+func (s *Server) handleBusinessDetail(w http.ResponseWriter, r *http.Request) {
+	businessID, err := parseID(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid business id")
+		return
+	}
+
+	business, err := s.getBusinessResponse(r.Context(), businessID)
+	if errors.Is(err, sql.ErrNoRows) || business.AccountStatus != "active" {
+		writeError(w, http.StatusNotFound, "business not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load business")
+		return
+	}
+	business.Email = ""
+
+	offers, err := s.getBusinessOffers(r.Context(), businessID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load business offers")
+		return
+	}
+	events, err := s.getBusinessEvents(r.Context(), businessID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load business events")
+		return
+	}
+
+	var likesReceived int64
+	if err := s.db.QueryRowContext(
+		r.Context(),
+		`SELECT COUNT(*) FROM business_likes WHERE business_id = $1`,
+		businessID,
+	).Scan(&likesReceived); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load business attention")
+		return
+	}
+
+	var likedByMe bool
+	if userID := currentUserID(r); userID > 0 {
+		if err := s.db.QueryRowContext(
+			r.Context(),
+			`SELECT EXISTS (
+			   SELECT 1
+			   FROM business_likes
+			   WHERE business_id = $1 AND user_id = $2
+			 )`,
+			businessID,
+			userID,
+		).Scan(&likedByMe); err != nil {
+			writeError(w, http.StatusInternalServerError, "could not load business attention")
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusOK, businessDetailResponse{
+		Business:      business,
+		Offers:        offers,
+		Events:        events,
+		LikesReceived: likesReceived,
+		LikedByMe:     likedByMe,
+	})
 }
 
 func (s *Server) handleBusinessUpdate(w http.ResponseWriter, r *http.Request) {

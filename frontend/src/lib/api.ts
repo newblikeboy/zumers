@@ -5,6 +5,7 @@ import type {
   BusinessClaimRequest,
   BusinessDashboard,
   BusinessDashboardUpdate,
+  BusinessDetailResponse,
   BusinessDuplicateCheckResponse,
   BusinessBookingRequest,
   BusinessLikeResponse,
@@ -20,6 +21,7 @@ import type {
   FriendSuggestion,
   Message,
   MessageReceipt,
+  MessageReceiptUpdate,
   NotificationItem,
   Post,
   PostMediaInput,
@@ -46,6 +48,7 @@ type TokenStore = {
 let tokenStore: TokenStore | null = null
 let currentUserRequest: Promise<User> | null = null
 let refreshSessionRequest: Promise<AuthResponse> | null = null
+const businessDetailRequests = new Map<number, Promise<BusinessDetailResponse>>()
 
 export function configureApiTokens(store: TokenStore) {
   tokenStore = store
@@ -101,6 +104,23 @@ export async function apiRequest<T>(
   }
 
   return data as T
+}
+
+function getBusinessDetail(id: number) {
+  const existing = businessDetailRequests.get(id)
+  if (existing) return existing
+
+  const request = apiRequest<BusinessDetailResponse>(`/businesses/${id}`)
+    .then((response) => {
+      businessDetailRequests.set(id, Promise.resolve(response))
+      return response
+    })
+    .catch((error) => {
+      businessDetailRequests.delete(id)
+      throw error
+    })
+  businessDetailRequests.set(id, request)
+  return request
 }
 
 export const api = {
@@ -216,6 +236,12 @@ export const api = {
       method: 'POST',
     }),
 
+  businessDetail: (id: number) => getBusinessDetail(id),
+
+  prefetchBusinessDetail: (id: number) => {
+    void getBusinessDetail(id).catch(() => undefined)
+  },
+
   removeBusinessLike: (id: number) =>
     apiRequest<BusinessLikeResponse>(`/businesses/${id}/like`, {
       method: 'DELETE',
@@ -279,11 +305,31 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  updateConversation: (
+    conversationId: number,
+    body: {
+      title?: string
+      avatar_url?: string
+      avatar_public_id?: string
+    },
+  ) =>
+    apiRequest<Conversation>(`/conversations/${conversationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+
   messages: (
     conversationId: number,
-    options: { fast?: boolean; limit?: number; beforeId?: number; signal?: AbortSignal } = {},
+    options: {
+      anchorId?: number
+      beforeId?: number
+      fast?: boolean
+      limit?: number
+      signal?: AbortSignal
+    } = {},
   ) => {
     const params = new URLSearchParams()
+    if (options.anchorId) params.set('anchor_id', String(options.anchorId))
     if (options.fast) params.set('fast', '1')
     if (options.limit) params.set('limit', String(options.limit))
     if (options.beforeId) params.set('before_id', String(options.beforeId))
@@ -293,6 +339,17 @@ export const api = {
       { signal: options.signal },
     )
   },
+
+  addConversationMembers: (conversationId: number, memberIds: number[]) =>
+    apiRequest<Conversation>(`/conversations/${conversationId}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ member_ids: memberIds }),
+    }),
+
+  removeConversationMember: (conversationId: number, memberId: number) =>
+    apiRequest<Conversation>(`/conversations/${conversationId}/members/${memberId}`, {
+      method: 'DELETE',
+    }),
 
   sendMessage: (
     conversationId: number,
@@ -321,7 +378,7 @@ export const api = {
     }),
 
   markConversationRead: (conversationId: number) =>
-    apiRequest<{ status: string }>(`/conversations/${conversationId}/read`, {
+    apiRequest<MessageReceiptUpdate>(`/conversations/${conversationId}/read`, {
       method: 'POST',
     }),
 

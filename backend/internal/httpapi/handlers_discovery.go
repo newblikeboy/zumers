@@ -63,6 +63,7 @@ type discoverySearchResult struct {
 	ImageURL               *string  `json:"image_url,omitempty"`
 	ActiveOfferTitle       *string  `json:"active_offer_title,omitempty"`
 	NextEventTitle         *string  `json:"next_event_title,omitempty"`
+	NextEventStartsAt      *string  `json:"next_event_starts_at,omitempty"`
 	BookingRequired        bool     `json:"booking_required"`
 	WalkInAvailable        bool     `json:"walk_in_available"`
 	ContactPhone           *string  `json:"contact_phone,omitempty"`
@@ -222,7 +223,16 @@ func (s *Server) loadDiscoveryCandidates(ctx context.Context, userID int64) ([]d
 		       AND (be.ends_at IS NULL OR be.ends_at >= CURRENT_TIMESTAMP)
 		     ORDER BY be.starts_at NULLS LAST, be.updated_at DESC
 		     LIMIT 1
-		   ) AS next_event_title
+		   ) AS next_event_title,
+		   (
+		     SELECT be.starts_at::text
+		     FROM business_events be
+		     WHERE be.business_id = b.id
+		       AND be.status IN ('scheduled', 'active')
+		       AND (be.ends_at IS NULL OR be.ends_at >= CURRENT_TIMESTAMP)
+		     ORDER BY be.starts_at NULLS LAST, be.updated_at DESC
+		     LIMIT 1
+		   ) AS next_event_starts_at
 		 FROM business_accounts b
 		 LEFT JOIN business_venues v
 		   ON v.business_id = b.id AND v.is_primary = true AND v.status = 'active'
@@ -257,7 +267,7 @@ func (s *Server) loadDiscoveryCandidates(ctx context.Context, userID int64) ([]d
 		var startingPrice, averagePrice sql.NullFloat64
 		var duration, minGroup, maxGroup sql.NullInt64
 		var bookingRequired, walkInAvailable sql.NullBool
-		var imageURL, activeOfferTitle, nextEventTitle sql.NullString
+		var imageURL, activeOfferTitle, nextEventTitle, nextEventStartsAt sql.NullString
 
 		if err := rows.Scan(
 			&businessID,
@@ -307,6 +317,7 @@ func (s *Server) loadDiscoveryCandidates(ctx context.Context, userID int64) ([]d
 			&imageURL,
 			&activeOfferTitle,
 			&nextEventTitle,
+			&nextEventStartsAt,
 		); err != nil {
 			return nil, err
 		}
@@ -384,6 +395,7 @@ func (s *Server) loadDiscoveryCandidates(ctx context.Context, userID int64) ([]d
 			ImageURL:               nullableString(imageURL),
 			ActiveOfferTitle:       nullableString(activeOfferTitle),
 			NextEventTitle:         nullableString(nextEventTitle),
+			NextEventStartsAt:      nullableString(nextEventStartsAt),
 			BookingRequired:        bookingRequired.Valid && bookingRequired.Bool,
 			WalkInAvailable:        !bookingRequired.Valid || walkInAvailable.Bool,
 			ContactPhone:           nullableString(contactPhone),
@@ -415,6 +427,7 @@ func (s *Server) loadDiscoveryCandidates(ctx context.Context, userID int64) ([]d
 			valueOrEmpty(result.BestFor),
 			valueOrEmpty(result.ActiveOfferTitle),
 			valueOrEmpty(result.NextEventTitle),
+			valueOrEmpty(result.NextEventStartsAt),
 		}, " "))
 
 		candidates = append(candidates, discoveryCandidate{

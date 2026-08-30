@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  Camera,
   Check,
   CheckCheck,
   ChevronDown,
@@ -8,16 +9,19 @@ import {
   ImagePlus,
   Info,
   MapPin,
+  Pencil,
   Plus,
   Search,
   Send,
+  UserMinus,
+  UserPlus,
   Users,
   Wifi,
   WifiOff,
   X,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ChangeEvent, FormEvent } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react'
 import { useAuth } from '../auth/AuthContext'
 import { Avatar } from '../components/AppLayout'
 import { EmptyState } from '../components/EmptyState'
@@ -48,6 +52,7 @@ const wsBaseUrl =
 
 const pendingBusinessShareKey = 'zumers.pendingBusinessShare'
 const messagePageSize = 30
+const optimisticMessageStartID = -1
 
 type MessagePageInfo = {
   hasMore: boolean
@@ -101,6 +106,14 @@ export function ChatPage() {
   const [pendingBusinessShare, setPendingBusinessShare] = useState<SharedBusinessMessage | null>(null)
   const [shareBusyConversationID, setShareBusyConversationID] = useState<number | null>(null)
   const [shareError, setShareError] = useState<string | null>(null)
+  const [groupMemberPickerOpen, setGroupMemberPickerOpen] = useState(false)
+  const [selectedAddMemberIDs, setSelectedAddMemberIDs] = useState<number[]>([])
+  const [memberActionBusyID, setMemberActionBusyID] = useState<number | 'add' | null>(null)
+  const [unreadDividerMessageID, setUnreadDividerMessageID] = useState<number | null>(null)
+  const [groupInfoEditing, setGroupInfoEditing] = useState(false)
+  const [groupNameDraft, setGroupNameDraft] = useState('')
+  const [groupInfoBusy, setGroupInfoBusy] = useState(false)
+  const [groupPhotoProgress, setGroupPhotoProgress] = useState<number | null>(null)
   const [isMobileChat, setIsMobileChat] = useState(() =>
     typeof window !== 'undefined'
       ? window.matchMedia('(max-width: 760px)').matches
@@ -117,7 +130,12 @@ export function ChatPage() {
   const messageLoadRef = useRef(0)
   const olderLoadRef = useRef(new Set<number>())
   const shouldScrollLatestRef = useRef(false)
+  const unreadScrollMessageIDRef = useRef<number | null>(null)
+  const readMarkTimeoutRef = useRef<number | undefined>(undefined)
   const messagesRef = useRef<HTMLDivElement | null>(null)
+  const draftInputRef = useRef<HTMLTextAreaElement | null>(null)
+  const optimisticMessageIDRef = useRef(optimisticMessageStartID)
+  const lastSubmitRef = useRef<{ signature: string; time: number } | null>(null)
 
   async function loadConversations() {
     const response = await api.conversations()
@@ -201,7 +219,29 @@ export function ChatPage() {
   useEffect(() => {
     setDetailsOpen(false)
     setSelectedMessageID(null)
+    setGroupMemberPickerOpen(false)
+    setSelectedAddMemberIDs([])
+    setGroupInfoEditing(false)
+    setGroupNameDraft(active?.title ?? '')
+    setUnreadDividerMessageID(active ? firstUnreadMessageID(active, user?.id) : null)
   }, [active?.id])
+
+  useEffect(() => {
+    const className = 'chat-thread-open'
+    const shouldHideMobileNav = isMobileChat && mobileChatView === 'thread' && Boolean(active)
+    document.body.classList.toggle(className, shouldHideMobileNav)
+    return () => {
+      document.body.classList.remove(className)
+    }
+  }, [active, isMobileChat, mobileChatView])
+
+  useEffect(() => {
+    return () => {
+      if (readMarkTimeoutRef.current) {
+        window.clearTimeout(readMarkTimeoutRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!active) {
@@ -212,7 +252,12 @@ export function ChatPage() {
     const conversationID = active.id
     const loadID = messageLoadRef.current + 1
     messageLoadRef.current = loadID
-    shouldScrollLatestRef.current = true
+    const unreadMessageID = firstUnreadMessageID(active, user?.id)
+    const initialMessageLimit = unreadMessageID
+      ? Math.min(100, Math.max(messagePageSize, (active.unread_count ?? 0) + 10))
+      : messagePageSize
+    unreadScrollMessageIDRef.current = unreadMessageID
+    shouldScrollLatestRef.current = !unreadMessageID
     const cachedMessages = messageCacheRef.current.get(conversationID)
     setMessages(cachedMessages ?? [])
     setShowScrollToLatest(false)
@@ -221,8 +266,9 @@ export function ChatPage() {
     const controller = new AbortController()
     api
       .messages(conversationID, {
+        anchorId: unreadMessageID ?? undefined,
         fast: true,
-        limit: messagePageSize,
+        limit: initialMessageLimit,
         signal: controller.signal,
       })
       .then((response) => {
@@ -233,13 +279,13 @@ export function ChatPage() {
           mergeMessages(current, fastMessages),
         )
         if (activeRef.current?.id === conversationID) {
-          scrollToLatest('auto')
+          scrollToUnreadOrLatest(conversationID, unreadMessageID, 'auto')
         }
-        void api.markConversationRead(conversationID).catch(() => undefined)
 
         void api
           .messages(conversationID, {
-            limit: messagePageSize,
+            anchorId: unreadMessageID ?? undefined,
+            limit: initialMessageLimit,
             signal: controller.signal,
           })
           .then((fullResponse) => {
@@ -253,7 +299,9 @@ export function ChatPage() {
             if (activeRef.current?.id === conversationID && container) {
               const distanceFromBottom =
                 container.scrollHeight - container.scrollTop - container.clientHeight
-              if (distanceFromBottom < 240) {
+              if (unreadMessageID) {
+                scrollToUnreadOrLatest(conversationID, unreadMessageID, 'auto')
+              } else if (distanceFromBottom < 240) {
                 scrollToLatest('auto')
               }
             }
@@ -269,7 +317,7 @@ export function ChatPage() {
       cancelled = true
       controller.abort()
     }
-  }, [active?.id])
+  }, [active?.id, user?.id])
 
   useEffect(() => {
     const container = messagesRef.current
@@ -277,6 +325,10 @@ export function ChatPage() {
     if (shouldScrollLatestRef.current && messages.length > 0) {
       shouldScrollLatestRef.current = false
       scrollToLatest('auto')
+      return
+    }
+    if (unreadScrollMessageIDRef.current && messages.length > 0 && active?.id) {
+      scrollToUnreadOrLatest(active.id, unreadScrollMessageIDRef.current, 'auto')
       return
     }
     const distanceFromBottom =
@@ -287,6 +339,10 @@ export function ChatPage() {
       setShowScrollToLatest(true)
     }
   }, [messages, active])
+
+  useEffect(() => {
+    resizeDraftInput()
+  }, [draft])
 
   function scrollToLatest(behavior?: ScrollBehavior) {
     window.requestAnimationFrame(() => {
@@ -305,6 +361,83 @@ export function ChatPage() {
       }
       setShowScrollToLatest(false)
     })
+  }
+
+  function scrollToUnreadOrLatest(
+    conversationID: number,
+    messageID: number | null,
+    behavior?: ScrollBehavior,
+  ) {
+    if (!messageID) {
+      scrollToLatest(behavior)
+      void markActiveConversationRead(conversationID)
+      return
+    }
+
+    window.requestAnimationFrame(() => {
+      const container = messagesRef.current
+      const target = container?.querySelector<HTMLElement>(
+        `[data-message-id="${messageID}"]`,
+      )
+      if (!container || !target) {
+        scrollToLatest(behavior)
+        return
+      }
+      const previousScrollBehavior = container.style.scrollBehavior
+      if (behavior) {
+        container.style.scrollBehavior = behavior
+      }
+      container.scrollTop = Math.max(0, target.offsetTop - container.offsetTop - 8)
+      if (behavior) {
+        window.requestAnimationFrame(() => {
+          container.style.scrollBehavior = previousScrollBehavior
+        })
+      }
+      unreadScrollMessageIDRef.current = null
+      setShowScrollToLatest(true)
+      if (readMarkTimeoutRef.current) {
+        window.clearTimeout(readMarkTimeoutRef.current)
+      }
+      readMarkTimeoutRef.current = window.setTimeout(() => {
+        void markActiveConversationRead(conversationID)
+      }, 700)
+    })
+  }
+
+  async function markActiveConversationRead(conversationID: number) {
+    if (!user?.id) return
+    try {
+      const receipt = await api.markConversationRead(conversationID)
+      applyReceipt(receipt, 'read')
+      clearConversationUnread(conversationID)
+    } catch {
+      // Read receipt failures should not block the thread view.
+    }
+  }
+
+  function clearConversationUnread(conversationID: number) {
+    setConversations((current) => {
+      const next = current.map((conversation) =>
+        conversation.id === conversationID
+          ? {
+              ...conversation,
+              unread_count: 0,
+              first_unread_message_id: undefined,
+            }
+          : conversation,
+      )
+      writeCachedChatConversations(user?.id, next)
+      return next
+    })
+    setActive((current) =>
+      current?.id === conversationID
+        ? {
+            ...current,
+            unread_count: 0,
+            first_unread_message_id: undefined,
+          }
+        : current,
+    )
   }
 
   function handleMessagesScroll() {
@@ -334,7 +467,8 @@ export function ChatPage() {
   ) {
     if (activeRef.current?.id === conversationID) {
       setMessages((current) => {
-        const next = updater(messageCacheRef.current.get(conversationID) ?? current)
+        const cached = messageCacheRef.current.get(conversationID)
+        const next = updater(current.length > 0 ? current : cached ?? current)
         messageCacheRef.current.set(conversationID, next)
         return next
       })
@@ -349,6 +483,148 @@ export function ChatPage() {
     messageCacheRef.current.set(conversationID, messagesToRestore)
     if (activeRef.current?.id === conversationID) {
       setMessages(messagesToRestore)
+    }
+  }
+
+  function updateConversationLatest(conversationID: number, latestMessage?: Message) {
+    if (!latestMessage) return
+    setConversations((current) => {
+      const next = current.map((conversation) =>
+        conversation.id === conversationID
+          ? {
+              ...conversation,
+              latest_message: latestMessage,
+              updated_at: latestMessage.created_at,
+            }
+          : conversation,
+      )
+        .sort(
+          (left, right) =>
+            new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime(),
+        )
+      writeCachedChatConversations(user?.id, next)
+      return next
+    })
+    setActive((current) =>
+      current?.id === conversationID
+        ? {
+            ...current,
+            latest_message: latestMessage,
+            updated_at: latestMessage.created_at,
+          }
+        : current,
+    )
+  }
+
+  function restoreConversationPreview(conversation: Conversation) {
+    setConversations((current) => {
+      const next = current.map((item) =>
+        item.id === conversation.id ? conversation : item,
+      )
+      writeCachedChatConversations(user?.id, next)
+      return next
+    })
+    setActive((current) => (current?.id === conversation.id ? conversation : current))
+  }
+
+  function replaceConversation(updated: Conversation) {
+    setConversations((current) => {
+      const next = current.map((conversation) =>
+        conversation.id === updated.id ? updated : conversation,
+      )
+      writeCachedChatConversations(user?.id, next)
+      return next
+    })
+    setActive((current) => (current?.id === updated.id ? updated : current))
+  }
+
+  function toggleAddMember(memberID: number) {
+    setSelectedAddMemberIDs((current) =>
+      current.includes(memberID)
+        ? current.filter((id) => id !== memberID)
+        : [...current, memberID],
+    )
+  }
+
+  async function addGroupMembers() {
+    if (!active || selectedAddMemberIDs.length === 0) return
+    setMemberActionBusyID('add')
+    setError(null)
+    try {
+      const updated = await api.addConversationMembers(active.id, selectedAddMemberIDs)
+      replaceConversation(updated)
+      setSelectedAddMemberIDs([])
+      setGroupMemberPickerOpen(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not add members')
+    } finally {
+      setMemberActionBusyID(null)
+    }
+  }
+
+  async function removeGroupMember(memberID: number) {
+    if (!active) return
+    setMemberActionBusyID(memberID)
+    setError(null)
+    try {
+      const updated = await api.removeConversationMember(active.id, memberID)
+      replaceConversation(updated)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not remove member')
+    } finally {
+      setMemberActionBusyID(null)
+    }
+  }
+
+  async function updateGroupName(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!active || active.conversation_type !== 'group') return
+    const title = groupNameDraft.trim()
+    if (!title || title === (active.title ?? '').trim()) {
+      setGroupInfoEditing(false)
+      setGroupNameDraft(active.title ?? '')
+      return
+    }
+    setGroupInfoBusy(true)
+    setError(null)
+    try {
+      const updated = await api.updateConversation(active.id, { title })
+      replaceConversation(updated)
+      setGroupInfoEditing(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update group name')
+    } finally {
+      setGroupInfoBusy(false)
+    }
+  }
+
+  async function updateGroupPhoto(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget
+    const file = input.files?.[0]
+    if (!file || !active || active.conversation_type !== 'group') return
+    if (!file.type.startsWith('image/')) {
+      setError('Group photo must be an image')
+      input.value = ''
+      return
+    }
+    setGroupInfoBusy(true)
+    setGroupPhotoProgress(0)
+    setError(null)
+    try {
+      const uploaded = await uploadToCloudinary(file, (progress) =>
+        setGroupPhotoProgress(progress.percent),
+      )
+      const updated = await api.updateConversation(active.id, {
+        avatar_url: uploaded.secure_url,
+        avatar_public_id: uploaded.cloudinary_public_id,
+      })
+      replaceConversation(updated)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update group photo')
+    } finally {
+      setGroupInfoBusy(false)
+      setGroupPhotoProgress(null)
+      input.value = ''
     }
   }
 
@@ -440,6 +716,7 @@ export function ChatPage() {
               ? current
               : [...current, message],
           )
+          updateConversationLatest(message.conversation_id, message)
           if (activeRef.current?.id === message.conversation_id) {
             if (message.sender_id !== currentUserID) {
               ws.send(
@@ -546,25 +823,77 @@ export function ChatPage() {
     }
   }
 
+  function resizeDraftInput() {
+    const input = draftInputRef.current
+    if (!input) return
+    input.style.height = 'auto'
+    input.style.height = `${Math.min(input.scrollHeight, 126)}px`
+  }
+
+  function handleDraftKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return
+    event.preventDefault()
+    const form = event.currentTarget.form
+    if (form) {
+      form.requestSubmit()
+    }
+  }
+
   async function send(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!active) return
+    if (!active || !user) return
+    const conversation = active
     const content = draft.trim()
     if (!content && !mediaDraft) return
+    const submitSignature = [
+      conversation.id,
+      content,
+      mediaDraft?.cloudinary_public_id ?? '',
+    ].join(':')
+    const now = Date.now()
+    if (
+      lastSubmitRef.current?.signature === submitSignature &&
+      now - lastSubmitRef.current.time < 400
+    ) {
+      return
+    }
+    lastSubmitRef.current = { signature: submitSignature, time: now }
     setDraft('')
+    shouldScrollLatestRef.current = true
+    const optimisticMessage = createOptimisticMessage({
+      conversation,
+      content,
+      currentUserID: user.id,
+      id: optimisticMessageIDRef.current--,
+      mediaDraft,
+    })
+    setConversationMessages(conversation.id, (current) => [...current, optimisticMessage])
+    updateConversationLatest(conversation.id, optimisticMessage)
 
     if (mediaDraft) {
-      const message = await api.sendMessage(active.id, {
-        message_type: mediaDraft.media_type,
-        content: content || undefined,
-        media_url: mediaDraft.secure_url,
-        media_public_id: mediaDraft.cloudinary_public_id,
-      })
-      setConversationMessages(active.id, (current) =>
-        current.some((item) => item.id === message.id) ? current : [...current, message],
-      )
+      const currentMediaDraft = mediaDraft
       setMediaDraft(null)
-      await loadConversations()
+      try {
+        const message = await api.sendMessage(conversation.id, {
+          message_type: currentMediaDraft.media_type,
+          content: content || undefined,
+          media_url: currentMediaDraft.secure_url,
+          media_public_id: currentMediaDraft.cloudinary_public_id,
+        })
+        setConversationMessages(conversation.id, (current) =>
+          replaceOptimisticMessage(current, optimisticMessage.id, message),
+        )
+        updateConversationLatest(conversation.id, message)
+        await loadConversations()
+      } catch (err) {
+        setConversationMessages(conversation.id, (current) =>
+          current.filter((message) => message.id !== optimisticMessage.id),
+        )
+        restoreConversationPreview(conversation)
+        setDraft(content)
+        setMediaDraft(currentMediaDraft)
+        setError(err instanceof Error ? err.message : 'Could not send message')
+      }
       return
     }
 
@@ -572,7 +901,7 @@ export function ChatPage() {
       socketRef.current.send(
         JSON.stringify({
           type: 'message.send',
-          conversation_id: active.id,
+          conversation_id: conversation.id,
           message_type: 'text',
           content,
         }),
@@ -580,11 +909,24 @@ export function ChatPage() {
       return
     }
 
-    const message = await api.sendMessage(active.id, {
-      message_type: 'text',
-      content,
-    })
-    setConversationMessages(active.id, (current) => [...current, message])
+    try {
+      const message = await api.sendMessage(conversation.id, {
+        message_type: 'text',
+        content,
+      })
+      setConversationMessages(conversation.id, (current) =>
+        replaceOptimisticMessage(current, optimisticMessage.id, message),
+      )
+      updateConversationLatest(conversation.id, message)
+      await loadConversations()
+    } catch (err) {
+      setConversationMessages(conversation.id, (current) =>
+        current.filter((message) => message.id !== optimisticMessage.id),
+      )
+      restoreConversationPreview(conversation)
+      setDraft(content)
+      setError(err instanceof Error ? err.message : 'Could not send message')
+    }
   }
 
   async function shareBusinessToConversation(conversation: Conversation) {
@@ -925,7 +1267,12 @@ export function ChatPage() {
                 <strong>{conversationDisplayName(conversation)}</strong>
                 <span>{messagePreview(conversation.latest_message)}</span>
               </div>
-              <small>{formatShortTime(conversation.updated_at)}</small>
+              <small>
+                <span>{formatShortTime(conversation.updated_at)}</span>
+                {(conversation.unread_count ?? 0) > 0 ? (
+                  <em>{compactUnreadCount(conversation.unread_count)}</em>
+                ) : null}
+              </small>
             </button>
           ))}
         </div>
@@ -943,13 +1290,23 @@ export function ChatPage() {
               >
                 <ArrowLeft size={21} />
               </button>
-              <Avatar
-                name={conversationDisplayName(active)}
-                src={conversationAvatarUrl(active)}
-              />
-              <div>
-                <h2>{conversationDisplayName(active)}</h2>
-              </div>
+              <button
+                className="message-header-profile"
+                type="button"
+                onClick={() => {
+                  setSelectedMessageID(null)
+                  setDetailsOpen(true)
+                }}
+              >
+                <Avatar
+                  name={conversationDisplayName(active)}
+                  src={conversationAvatarUrl(active)}
+                />
+                <div>
+                  <h2>{conversationDisplayName(active)}</h2>
+                  <span>{conversationSubtitle(active)}</span>
+                </div>
+              </button>
               <div className="chat-header-actions">
                 <button
                   aria-label="Conversation details"
@@ -975,22 +1332,57 @@ export function ChatPage() {
                 {olderLoadingConversationID === active.id ? (
                   <div className="older-messages-loader">Loading older messages</div>
                 ) : null}
-                {messages.map((message) => (
-                  <MessageBubble
-                    key={message.id}
-                    message={message}
-                    conversation={active}
-                    mine={message.sender_id === user?.id}
-                    sender={active.members.find((member) => member.id === message.sender_id)}
-                    showSender={active.conversation_type === 'group' && message.sender_id !== user?.id}
-                    receipt={message.sender_id === user?.id ? messageReceipt(message) : undefined}
-                    onVote={voteBusinessShare}
-                    onOpenInfo={() => {
-                      setSelectedMessageID(message.id)
-                      setDetailsOpen(true)
-                    }}
-                  />
-                ))}
+                {messages.map((message, index) => {
+                  const previousMessage = messages[index - 1]
+                  const nextMessage = messages[index + 1]
+                  const showDateDivider =
+                    !previousMessage ||
+                    !isSameMessageDay(previousMessage.created_at, message.created_at)
+                  const groupedWithPrevious =
+                    Boolean(previousMessage) &&
+                    previousMessage.sender_id === message.sender_id &&
+                    isSameMessageDay(previousMessage.created_at, message.created_at) &&
+                    minutesBetween(previousMessage.created_at, message.created_at) < 5
+                  const groupedWithNext =
+                    Boolean(nextMessage) &&
+                    nextMessage.sender_id === message.sender_id &&
+                    isSameMessageDay(nextMessage.created_at, message.created_at) &&
+                    minutesBetween(message.created_at, nextMessage.created_at) < 5
+                  const showUnreadDivider =
+                    unreadDividerMessageID === message.id
+
+                  return (
+                    <Fragment key={message.id < 0 ? `${message.id}-${message.created_at}` : message.id}>
+                      {showDateDivider ? (
+                        <div className="message-date-divider">
+                          {formatMessageDay(message.created_at)}
+                        </div>
+                      ) : null}
+                      {showUnreadDivider ? (
+                        <div className="message-unread-divider">Unread messages</div>
+                      ) : null}
+                      <MessageBubble
+                        message={message}
+                        conversation={active}
+                        groupedWithNext={groupedWithNext}
+                        groupedWithPrevious={groupedWithPrevious}
+                        mine={message.sender_id === user?.id}
+                        sender={active.members.find((member) => member.id === message.sender_id)}
+                        showSender={
+                          active.conversation_type === 'group' &&
+                          message.sender_id !== user?.id &&
+                          !groupedWithPrevious
+                        }
+                        receipt={message.sender_id === user?.id ? messageReceipt(message) : undefined}
+                        onVote={voteBusinessShare}
+                        onOpenInfo={() => {
+                          setSelectedMessageID(message.id)
+                          setDetailsOpen(true)
+                        }}
+                      />
+                    </Fragment>
+                  )
+                })}
               </div>
               {showScrollToLatest ? (
                 <button
@@ -1040,10 +1432,14 @@ export function ChatPage() {
                   <ImagePlus size={18} />
                   <input accept="image/*,video/*" type="file" onChange={attachMedia} />
                 </label>
-                <input
+                <textarea
                   name="content"
                   placeholder="Message"
+                  ref={draftInputRef}
+                  rows={1}
                   value={draft}
+                  onFocus={() => scrollToLatest()}
+                  onKeyDown={handleDraftKeyDown}
                   onChange={(event) => setDraft(event.target.value)}
                 />
                 <button
@@ -1059,11 +1455,32 @@ export function ChatPage() {
               <ConversationDetailsPanel
                 conversation={active}
                 currentUserID={user?.id}
+                friends={friends}
+                groupInfoBusy={groupInfoBusy}
+                groupInfoEditing={groupInfoEditing}
+                groupNameDraft={groupNameDraft}
+                groupMemberPickerOpen={groupMemberPickerOpen}
+                groupPhotoProgress={groupPhotoProgress}
+                memberActionBusyID={memberActionBusyID}
+                selectedAddMemberIDs={selectedAddMemberIDs}
                 selectedMessage={selectedMessage}
+                onAddGroupMembers={addGroupMembers}
                 onClose={() => {
                   setDetailsOpen(false)
                   setSelectedMessageID(null)
                 }}
+                onRemoveGroupMember={removeGroupMember}
+                onSetGroupInfoEditing={(editing) => {
+                  setGroupInfoEditing(editing)
+                  setGroupNameDraft(active.title ?? '')
+                }}
+                onSetGroupNameDraft={setGroupNameDraft}
+                onUpdateGroupName={updateGroupName}
+                onUpdateGroupPhoto={updateGroupPhoto}
+                onToggleAddMember={toggleAddMember}
+                onToggleGroupMemberPicker={() =>
+                  setGroupMemberPickerOpen((open) => !open)
+                }
               />
             ) : null}
           </>
@@ -1077,6 +1494,15 @@ export function ChatPage() {
 
 function ConversationAvatar({ conversation }: { conversation: Conversation }) {
   if (conversation.conversation_type === 'group') {
+    if (conversation.avatar_url) {
+      return (
+        <Avatar
+          name={conversationDisplayName(conversation)}
+          src={conversation.avatar_url}
+        />
+      )
+    }
+
     return (
       <span className="group-avatar" aria-hidden="true">
         <Users size={21} />
@@ -1103,7 +1529,7 @@ function conversationDisplayName(conversation: Conversation) {
 function conversationAvatarUrl(conversation: Conversation) {
   return conversation.conversation_type === 'direct'
     ? conversation.other_user?.avatar_url
-    : undefined
+    : conversation.avatar_url
 }
 
 function conversationSubtitle(conversation: Conversation) {
@@ -1114,6 +1540,18 @@ function conversationSubtitle(conversation: Conversation) {
   return conversation.other_user
     ? `@${conversation.other_user.username}`
     : ''
+}
+
+function firstUnreadMessageID(conversation: Conversation, currentUserID?: number) {
+  if (!currentUserID) return null
+  if ((conversation.unread_count ?? 0) <= 0) return null
+  if (conversation.latest_message?.sender_id === currentUserID) return null
+  return conversation.first_unread_message_id ?? null
+}
+
+function conversationOwnerID(conversation: Conversation) {
+  if (conversation.created_by) return conversation.created_by
+  return conversation.members.find((member) => member.role === 'owner')?.id ?? 0
 }
 
 function messagePreview(message?: Message) {
@@ -1127,6 +1565,11 @@ function messagePreview(message?: Message) {
   return message.content ?? 'Message'
 }
 
+function compactUnreadCount(value: number) {
+  if (value > 99) return '99+'
+  return String(value)
+}
+
 function parseSharedBusinessMessage(content?: string): SharedBusinessMessage | null {
   if (!content) return null
   try {
@@ -1138,9 +1581,42 @@ function parseSharedBusinessMessage(content?: string): SharedBusinessMessage | n
   }
 }
 
+function createOptimisticMessage({
+  conversation,
+  content,
+  currentUserID,
+  id,
+  mediaDraft,
+}: {
+  conversation: Conversation
+  content: string
+  currentUserID: number
+  id: number
+  mediaDraft: PostMediaInput | null
+}): Message {
+  const now = new Date().toISOString()
+  return {
+    id,
+    conversation_id: conversation.id,
+    sender_id: currentUserID,
+    message_type: mediaDraft?.media_type ?? 'text',
+    content: content || undefined,
+    media_url: mediaDraft?.secure_url,
+    media_public_id: mediaDraft?.cloudinary_public_id,
+    recipient_count: Math.max(0, conversation.member_count - 1),
+    delivered_count: 0,
+    read_count: 0,
+    created_at: now,
+  }
+}
+
 function mergeMessages(current: Message[], incoming: Message[]) {
   if (current.length === 0) return incoming
-  const byID = new Map(current.map((message) => [message.id, message]))
+  const retainedCurrent = current.filter(
+    (candidate) =>
+      !incoming.some((message) => isOptimisticMessageMatch(candidate, message)),
+  )
+  const byID = new Map(retainedCurrent.map((message) => [message.id, message]))
   for (const message of incoming) {
     const existing = byID.get(message.id)
     byID.set(message.id, existing ? mergeMessage(existing, message) : message)
@@ -1149,6 +1625,33 @@ function mergeMessages(current: Message[], incoming: Message[]) {
     (left, right) =>
       new Date(left.created_at).getTime() - new Date(right.created_at).getTime(),
   )
+}
+
+function replaceOptimisticMessage(
+  current: Message[],
+  optimisticID: number,
+  confirmedMessage: Message,
+) {
+  const replaced = current.some((message) => message.id === optimisticID)
+    ? current.map((message) =>
+        message.id === optimisticID ? confirmedMessage : message,
+      )
+    : mergeMessages(current, [confirmedMessage])
+
+  return mergeMessages(replaced, [])
+}
+
+function isOptimisticMessageMatch(candidate: Message, message: Message) {
+  if (candidate.id >= 0) return false
+  if (candidate.conversation_id !== message.conversation_id) return false
+  if (candidate.sender_id !== message.sender_id) return false
+  if (candidate.message_type !== message.message_type) return false
+  if ((candidate.content ?? '') !== (message.content ?? '')) return false
+  if ((candidate.media_url ?? '') !== (message.media_url ?? '')) return false
+
+  const sentAt = new Date(candidate.created_at).getTime()
+  const receivedAt = new Date(message.created_at).getTime()
+  return Math.abs(receivedAt - sentAt) < 30000
 }
 
 function mergeMessage(current: Message, incoming: Message): Message {
@@ -1179,6 +1682,8 @@ function RealtimeBadge({ status }: { status: 'Connecting' | 'Live' | 'Reconnecti
 
 function MessageBubble({
   conversation,
+  groupedWithNext,
+  groupedWithPrevious,
   message,
   mine,
   onVote,
@@ -1188,6 +1693,8 @@ function MessageBubble({
   onOpenInfo,
 }: {
   conversation: Conversation
+  groupedWithNext: boolean
+  groupedWithPrevious: boolean
   message: Message
   mine: boolean
   onVote: (messageID: number) => void
@@ -1199,7 +1706,16 @@ function MessageBubble({
   const sharedBusiness = parseSharedBusinessMessage(message.content)
 
   return (
-    <div className={mine ? 'message mine' : 'message'}>
+    <div
+      className={[
+        mine ? 'message mine' : 'message',
+        groupedWithPrevious ? 'continued' : '',
+        groupedWithNext ? 'grouped' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      data-message-id={message.id}
+    >
       <div
         className={
           sharedBusiness
@@ -1353,13 +1869,45 @@ function MessageReceiptIndicator({
 function ConversationDetailsPanel({
   conversation,
   currentUserID,
+  friends,
+  groupInfoBusy,
+  groupInfoEditing,
+  groupNameDraft,
+  groupMemberPickerOpen,
+  groupPhotoProgress,
+  memberActionBusyID,
+  selectedAddMemberIDs,
   selectedMessage,
+  onAddGroupMembers,
   onClose,
+  onRemoveGroupMember,
+  onSetGroupInfoEditing,
+  onSetGroupNameDraft,
+  onUpdateGroupName,
+  onUpdateGroupPhoto,
+  onToggleAddMember,
+  onToggleGroupMemberPicker,
 }: {
   conversation: Conversation
   currentUserID?: number
+  friends: User[]
+  groupInfoBusy: boolean
+  groupInfoEditing: boolean
+  groupNameDraft: string
+  groupMemberPickerOpen: boolean
+  groupPhotoProgress: number | null
+  memberActionBusyID: number | 'add' | null
+  selectedAddMemberIDs: number[]
   selectedMessage: Message | null
+  onAddGroupMembers: () => void
   onClose: () => void
+  onRemoveGroupMember: (memberID: number) => void
+  onSetGroupInfoEditing: (editing: boolean) => void
+  onSetGroupNameDraft: (value: string) => void
+  onUpdateGroupName: (event: FormEvent<HTMLFormElement>) => void
+  onUpdateGroupPhoto: (event: ChangeEvent<HTMLInputElement>) => void
+  onToggleAddMember: (memberID: number) => void
+  onToggleGroupMemberPicker: () => void
 }) {
   const ownerID = conversation.created_by
   const members = [...(conversation.members ?? [])].sort((first, second) => {
@@ -1368,6 +1916,61 @@ function ConversationDetailsPanel({
     if (firstOwner !== secondOwner) return firstOwner ? -1 : 1
     return first.display_name.localeCompare(second.display_name)
   })
+  const isGroup = conversation.conversation_type === 'group'
+  const isOwner = Boolean(currentUserID && conversationOwnerID(conversation) === currentUserID)
+  const addableFriends = friends.filter(
+    (friend) => !members.some((member) => member.id === friend.id),
+  )
+  const memberListRef = useRef<HTMLDivElement | null>(null)
+  const [memberScrollMetrics, setMemberScrollMetrics] = useState({
+    canScroll: false,
+    thumbHeight: 0,
+    thumbTop: 0,
+  })
+
+  function updateMemberScrollMetrics() {
+    const node = memberListRef.current
+    if (!node) {
+      setMemberScrollMetrics({ canScroll: false, thumbHeight: 0, thumbTop: 0 })
+      return
+    }
+    const canScroll = node.scrollHeight > node.clientHeight + 2
+    if (!canScroll) {
+      setMemberScrollMetrics({ canScroll: false, thumbHeight: 0, thumbTop: 0 })
+      return
+    }
+    const thumbHeight = Math.max(34, Math.round((node.clientHeight / node.scrollHeight) * node.clientHeight))
+    const maxThumbTop = Math.max(0, node.clientHeight - thumbHeight)
+    const maxScrollTop = Math.max(1, node.scrollHeight - node.clientHeight)
+    const thumbTop = Math.round((node.scrollTop / maxScrollTop) * maxThumbTop)
+    setMemberScrollMetrics((current) => {
+      if (
+        current.canScroll === canScroll &&
+        Math.abs(current.thumbHeight - thumbHeight) < 1 &&
+        Math.abs(current.thumbTop - thumbTop) < 1
+      ) {
+        return current
+      }
+      return { canScroll, thumbHeight, thumbTop }
+    })
+  }
+
+  useEffect(() => {
+    if (!isGroup || selectedMessage) return
+    const node = memberListRef.current
+    if (!node) return
+
+    updateMemberScrollMetrics()
+    const frame = window.requestAnimationFrame(updateMemberScrollMetrics)
+    const resizeObserver = new ResizeObserver(updateMemberScrollMetrics)
+    resizeObserver.observe(node)
+    window.addEventListener('resize', updateMemberScrollMetrics)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      resizeObserver.disconnect()
+      window.removeEventListener('resize', updateMemberScrollMetrics)
+    }
+  }, [isGroup, members.length, groupMemberPickerOpen, selectedMessage])
 
   return (
     <aside className="chat-details-panel">
@@ -1388,33 +1991,208 @@ function ConversationDetailsPanel({
 
       {selectedMessage ? (
         <MessageInfo message={selectedMessage} members={members} />
+      ) : !isGroup && conversation.other_user ? (
+        <ContactDetails user={conversation.other_user} />
       ) : (
         <div className="chat-details-body">
           <div className="group-profile">
-            <ConversationAvatar conversation={conversation} />
-            <h3>{conversationDisplayName(conversation)}</h3>
+            <div className="group-photo-control">
+              <ConversationAvatar conversation={conversation} />
+              {isOwner ? (
+                <label className="group-photo-action" title="Change group photo">
+                  <Camera size={17} />
+                  <input
+                    accept="image/*"
+                    disabled={groupInfoBusy}
+                    type="file"
+                    onChange={onUpdateGroupPhoto}
+                  />
+                </label>
+              ) : null}
+            </div>
+            {groupPhotoProgress !== null ? (
+              <div className="group-photo-progress">
+                <span style={{ width: `${groupPhotoProgress}%` }} />
+              </div>
+            ) : null}
+            {groupInfoEditing ? (
+              <form className="group-name-edit" onSubmit={onUpdateGroupName}>
+                <input
+                  autoFocus
+                  maxLength={120}
+                  value={groupNameDraft}
+                  onChange={(event) => onSetGroupNameDraft(event.target.value)}
+                />
+                <button
+                  aria-label="Save group name"
+                  className="icon-button quiet"
+                  disabled={!groupNameDraft.trim() || groupInfoBusy}
+                  type="submit"
+                >
+                  <Check size={18} />
+                </button>
+                <button
+                  aria-label="Cancel group name edit"
+                  className="icon-button quiet"
+                  disabled={groupInfoBusy}
+                  type="button"
+                  onClick={() => onSetGroupInfoEditing(false)}
+                >
+                  <X size={18} />
+                </button>
+              </form>
+            ) : (
+              <div className="group-name-row">
+                <h3>{conversationDisplayName(conversation)}</h3>
+                {isOwner ? (
+                  <button
+                    aria-label="Edit group name"
+                    className="icon-button quiet"
+                    type="button"
+                    onClick={() => onSetGroupInfoEditing(true)}
+                  >
+                    <Pencil size={16} />
+                  </button>
+                ) : null}
+              </div>
+            )}
             <span>{conversationSubtitle(conversation)}</span>
           </div>
 
-          <section className="details-section">
+          <section className={isGroup ? 'details-section group-members-section' : 'details-section'}>
             <div className="details-section-heading">
               <strong>{conversation.conversation_type === 'group' ? 'Members' : 'Contact'}</strong>
               <span>{members.length}</span>
             </div>
-            <div className="member-list">
-              {members.map((member) => (
-                <MemberRow
-                  key={member.id}
-                  member={member}
-                  isCurrentUser={member.id === currentUserID}
-                  isOwner={member.role === 'owner' || member.id === ownerID}
-                />
-              ))}
-            </div>
+            {isGroup && isOwner ? (
+              <button
+                className="member-action-row"
+                type="button"
+                onClick={onToggleGroupMemberPicker}
+              >
+                <span className="member-action-icon">
+                  <UserPlus size={18} />
+                </span>
+                <strong>Add member</strong>
+              </button>
+            ) : null}
+            {groupMemberPickerOpen ? (
+              <div className="group-add-panel">
+                {addableFriends.length === 0 ? (
+                  <div className="details-empty">No friends available to add</div>
+                ) : (
+                  addableFriends.map((friend) => (
+                    <label className="group-member-option" key={friend.id}>
+                      <input
+                        checked={selectedAddMemberIDs.includes(friend.id)}
+                        type="checkbox"
+                        onChange={() => onToggleAddMember(friend.id)}
+                      />
+                      <Avatar name={friend.display_name} src={friend.avatar_url} />
+                      <span>
+                        <strong>{friend.display_name}</strong>
+                        <small>@{friend.username}</small>
+                      </span>
+                    </label>
+                  ))
+                )}
+                <button
+                  className="primary-button"
+                  disabled={selectedAddMemberIDs.length === 0 || memberActionBusyID === 'add'}
+                  type="button"
+                  onClick={onAddGroupMembers}
+                >
+                  <UserPlus size={17} />
+                  <span>{memberActionBusyID === 'add' ? 'Adding' : 'Add selected'}</span>
+                </button>
+              </div>
+            ) : null}
+            {isGroup ? (
+              <div className="group-member-list-wrap">
+                <div
+                  className="member-list group-member-list"
+                  ref={memberListRef}
+                  onScroll={updateMemberScrollMetrics}
+                >
+                  {members.map((member) => (
+                    <MemberRow
+                      key={member.id}
+                      member={member}
+                      isCurrentUser={member.id === currentUserID}
+                      isOwner={member.role === 'owner' || member.id === ownerID}
+                      canRemove={
+                        isOwner &&
+                        member.id !== currentUserID &&
+                        member.id !== conversationOwnerID(conversation)
+                      }
+                      removing={memberActionBusyID === member.id}
+                      onRemove={() => onRemoveGroupMember(member.id)}
+                    />
+                  ))}
+                </div>
+                {memberScrollMetrics.canScroll ? (
+                  <div className="group-member-scrollbar" aria-hidden="true">
+                    <span
+                      style={{
+                        height: `${memberScrollMetrics.thumbHeight}px`,
+                        transform: `translateY(${memberScrollMetrics.thumbTop}px)`,
+                      }}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="member-list">
+                {members.map((member) => (
+                  <MemberRow
+                    key={member.id}
+                    member={member}
+                    isCurrentUser={member.id === currentUserID}
+                    isOwner={member.role === 'owner' || member.id === ownerID}
+                    canRemove={false}
+                    removing={memberActionBusyID === member.id}
+                    onRemove={() => onRemoveGroupMember(member.id)}
+                  />
+                ))}
+              </div>
+            )}
           </section>
         </div>
       )}
     </aside>
+  )
+}
+
+function ContactDetails({ user }: { user: User }) {
+  return (
+    <div className="chat-details-body">
+      <div className="contact-profile">
+        <Avatar name={user.display_name} src={user.avatar_url} />
+        <h3>{user.display_name}</h3>
+        <span>@{user.username}</span>
+      </div>
+
+      <section className="details-section">
+        <div className="details-section-heading">
+          <strong>About</strong>
+        </div>
+        <div className="contact-detail-card">
+          <span>{user.bio || 'No bio yet'}</span>
+        </div>
+      </section>
+
+      {user.location ? (
+        <section className="details-section">
+          <div className="details-section-heading">
+            <strong>Location</strong>
+          </div>
+          <div className="contact-detail-card">
+            <MapPin size={16} />
+            <span>{user.location}</span>
+          </div>
+        </section>
+      ) : null}
+    </div>
   )
 }
 
@@ -1493,15 +2271,21 @@ function ReceiptSection({
 }
 
 function MemberRow({
+  canRemove,
   member,
   isCurrentUser,
   isOwner,
   meta,
+  onRemove,
+  removing,
 }: {
+  canRemove?: boolean
   member: User
   isCurrentUser?: boolean
   isOwner?: boolean
   meta?: string
+  onRemove?: () => void
+  removing?: boolean
 }) {
   return (
     <div className="member-row">
@@ -1515,6 +2299,18 @@ function MemberRow({
           <Crown size={13} />
           Admin
         </em>
+      ) : null}
+      {canRemove ? (
+        <button
+          aria-label={`Remove ${member.display_name}`}
+          className="member-remove-button"
+          disabled={removing}
+          title={`Remove ${member.display_name}`}
+          type="button"
+          onClick={onRemove}
+        >
+          <UserMinus size={15} />
+        </button>
       ) : null}
     </div>
   )
@@ -1592,6 +2388,32 @@ function formatShortTime(value: string) {
     hour: 'numeric',
     minute: '2-digit',
   }).format(new Date(value))
+}
+
+function isSameMessageDay(first: string, second: string) {
+  const firstDate = new Date(first)
+  const secondDate = new Date(second)
+  return firstDate.toDateString() === secondDate.toDateString()
+}
+
+function minutesBetween(first: string, second: string) {
+  return Math.abs(new Date(second).getTime() - new Date(first).getTime()) / 60000
+}
+
+function formatMessageDay(value: string) {
+  const date = new Date(value)
+  const today = new Date()
+  const yesterday = new Date()
+  yesterday.setDate(today.getDate() - 1)
+
+  if (date.toDateString() === today.toDateString()) return 'Today'
+  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday'
+
+  return new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: date.getFullYear() === today.getFullYear() ? undefined : 'numeric',
+  }).format(date)
 }
 
 function formatLongTime(value: string) {

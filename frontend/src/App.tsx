@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './auth/AuthContext'
 import { AppLayout } from './components/AppLayout'
 import { AuthPage } from './pages/AuthPage'
+import { BusinessDetailPage } from './pages/BusinessDetailPage'
 import { BusinessPage } from './pages/BusinessPage'
 import { ChatPage } from './pages/ChatPage'
 import { FeedPage } from './pages/FeedPage'
@@ -66,6 +67,7 @@ function App() {
             <Route index element={<PlanPage />} />
             <Route path="feed" element={<FeedPage />} />
             <Route path="reels" element={<ReelsPage />} />
+            <Route path="businesses/:id" element={<BusinessDetailPage />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="friends" element={<FriendsPage />} />
             <Route path="chat" element={<ChatPage />} />

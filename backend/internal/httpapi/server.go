@@ -68,6 +68,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /api/v1/users/search", s.withAuth(s.handleUserSearch))
 	s.mux.HandleFunc("GET /api/v1/location/reverse", s.withAuth(s.withRateLimit("location-reverse", 20, 5, s.handleLocationReverse)))
 	s.mux.HandleFunc("GET /api/v1/discovery/search", s.withAuth(s.withRateLimit("discovery-search", 60, 20, s.handleDiscoverySearch)))
+	s.mux.HandleFunc("GET /api/v1/businesses/{id}", s.withAuth(s.handleBusinessDetail))
 	s.mux.HandleFunc("POST /api/v1/businesses/{id}/like", s.withAuth(s.handleBusinessLikeSet))
 	s.mux.HandleFunc("DELETE /api/v1/businesses/{id}/like", s.withAuth(s.handleBusinessLikeDelete))
 	s.mux.HandleFunc("POST /api/v1/businesses/{id}/bookings", s.withAuth(s.handleBusinessBookingCreate))
@@ -99,6 +100,9 @@ func (s *Server) routes() {
 
 	s.mux.HandleFunc("GET /api/v1/conversations", s.withAuth(s.handleConversationsList))
 	s.mux.HandleFunc("POST /api/v1/conversations", s.withAuth(s.handleConversationCreate))
+	s.mux.HandleFunc("PATCH /api/v1/conversations/{id}", s.withAuth(s.handleConversationUpdate))
+	s.mux.HandleFunc("POST /api/v1/conversations/{id}/members", s.withAuth(s.handleConversationMembersAdd))
+	s.mux.HandleFunc("DELETE /api/v1/conversations/{id}/members/{member_id}", s.withAuth(s.handleConversationMemberRemove))
 	s.mux.HandleFunc("GET /api/v1/conversations/{id}/messages", s.withAuth(s.handleMessageHistory))
 	s.mux.HandleFunc("POST /api/v1/conversations/{id}/messages", s.withAuth(s.withRateLimit("messages", 60, 20, s.handleMessageCreate)))
 	s.mux.HandleFunc("POST /api/v1/messages/{id}/business-vote", s.withAuth(s.handleBusinessShareVoteSet))
