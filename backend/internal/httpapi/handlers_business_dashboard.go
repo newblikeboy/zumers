@@ -451,7 +451,7 @@ func (s *Server) getBusinessOffers(ctx context.Context, businessID int64) ([]bus
 	rows, err := s.db.QueryContext(
 		ctx,
 		`SELECT id, business_id, venue_id, title, description, original_price, offer_price,
-		        discount_percent, discount_amount, starts_on, ends_on, starts_at, ends_at,
+		        discount_percent, discount_amount, starts_on, ends_on, starts_at::text, ends_at::text,
 		        applicable_days, terms, target_audience, status, click_count, created_at, updated_at
 		 FROM business_offers
 		 WHERE business_id = $1
@@ -475,9 +475,9 @@ func (s *Server) getBusinessOffers(ctx context.Context, businessID int64) ([]bus
 	for rows.Next() {
 		var offer businessOffer
 		var venueID sql.NullInt64
-		var description, applicableDays, terms, targetAudience sql.NullString
+		var description, startsAt, endsAt, applicableDays, terms, targetAudience sql.NullString
 		var originalPrice, offerPrice, discountPercent, discountAmount sql.NullFloat64
-		var startsOn, endsOn, startsAt, endsAt sql.NullTime
+		var startsOn, endsOn sql.NullTime
 		if err := rows.Scan(
 			&offer.ID,
 			&offer.BusinessID,
@@ -510,8 +510,8 @@ func (s *Server) getBusinessOffers(ctx context.Context, businessID int64) ([]bus
 		offer.DiscountAmount = nullableFloat64(discountAmount)
 		offer.StartsOn = nullableDateString(startsOn)
 		offer.EndsOn = nullableDateString(endsOn)
-		offer.StartsAt = nullableTimeString(startsAt)
-		offer.EndsAt = nullableTimeString(endsAt)
+		offer.StartsAt = nullableString(startsAt)
+		offer.EndsAt = nullableString(endsAt)
 		offer.ApplicableDays = nullableString(applicableDays)
 		offer.Terms = nullableString(terms)
 		offer.TargetAudience = nullableString(targetAudience)

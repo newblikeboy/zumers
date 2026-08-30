@@ -560,6 +560,7 @@ func (s *Server) handleBusinessDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		s.logger.Error("business detail load failed", "business_id", businessID, "stage", "business", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not load business")
 		return
 	}
@@ -567,11 +568,13 @@ func (s *Server) handleBusinessDetail(w http.ResponseWriter, r *http.Request) {
 
 	offers, err := s.getBusinessOffers(r.Context(), businessID)
 	if err != nil {
+		s.logger.Error("business detail load failed", "business_id", businessID, "stage", "offers", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not load business offers")
 		return
 	}
 	events, err := s.getBusinessEvents(r.Context(), businessID)
 	if err != nil {
+		s.logger.Error("business detail load failed", "business_id", businessID, "stage", "events", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not load business events")
 		return
 	}
@@ -582,6 +585,7 @@ func (s *Server) handleBusinessDetail(w http.ResponseWriter, r *http.Request) {
 		`SELECT COUNT(*) FROM business_likes WHERE business_id = $1`,
 		businessID,
 	).Scan(&likesReceived); err != nil {
+		s.logger.Error("business detail load failed", "business_id", businessID, "stage", "likes_count", "error", err)
 		writeError(w, http.StatusInternalServerError, "could not load business attention")
 		return
 	}
@@ -598,6 +602,7 @@ func (s *Server) handleBusinessDetail(w http.ResponseWriter, r *http.Request) {
 			businessID,
 			userID,
 		).Scan(&likedByMe); err != nil {
+			s.logger.Error("business detail load failed", "business_id", businessID, "user_id", userID, "stage", "liked_by_me", "error", err)
 			writeError(w, http.StatusInternalServerError, "could not load business attention")
 			return
 		}
